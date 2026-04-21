@@ -164,8 +164,7 @@ The APK is not included in this repository. Download it from APKPure or APKMirro
 
 **Recommended version: Subway Surfers 3.6.x (API 23+, x86_64)**
 
-Download links:
-- https://apkpure.com/subway-surfers/com.kiloo.subwaysurf
+Download link (APKMirror — verifies APK signatures against Google Play originals):
 - https://www.apkmirror.com/?s=subway+surfers
 
 Look for: `com.kiloo.subwaysurf_X.XX.X-XXXXX_minAPI23(x86_64).apk`
