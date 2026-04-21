@@ -34,8 +34,7 @@ Uses the NitroGen model as a teacher to train a Double DQN agent to play Subway 
         | SSH / SFTP (paramiko)
         |
 [Linux Server (RTX 5090 / RTX 4090 or better recommended)]
-  Xvfb :1             -- virtual display
-  TigerVNC :1         -- VNC server (view screen from local)
+  Xvfb :1             -- virtual display (headless, no monitor needed)
   Android AVD         -- emulator (1080x2280)
   ~/vla_pipeline/
     pipeline_ng_rl.py -- main RL pipeline
@@ -63,9 +62,9 @@ Uses the NitroGen model as a teacher to train a Double DQN agent to play Subway 
 - CUDA 12.x
 - Python 3.10 or higher (Miniconda recommended)
 - Items automatically installed by `server_setup.py`:
-  - xvfb, tigervnc-standalone-server, adb
+  - xvfb, adb, openjdk-17, git
   - Android SDK cmdline-tools, API 34 emulator
-  - pip: opencv-python-headless, numpy, torch, scrcpy-client
+  - Miniconda, pip: torch, opencv-python-headless, numpy, scrcpy-client, pyzmq
 
 ---
 
@@ -88,8 +87,6 @@ SERVER_PORT = 22
 SERVER_USER = "YOUR_USERNAME"     # your Linux account on the server
 SERVER_PASS = "YOUR_PASSWORD"
 
-VNC_PASSWORD = "YOUR_VNC_PASSWORD"
-
 # All remote paths below are auto-derived from SERVER_USER.
 # No changes needed unless your home directory is non-standard.
 ```
@@ -104,7 +101,6 @@ Alternatively, use environment variables instead of editing the file:
 export VLA_HOST=YOUR_SERVER_IP
 export VLA_USER=YOUR_USERNAME
 export VLA_PASS=YOUR_PASSWORD
-export VLA_VNC_PASS=YOUR_VNC_PASSWORD
 ```
 
 ### 3-2. Automated Server Setup
@@ -114,26 +110,30 @@ python server_setup.py
 ```
 
 This script automatically:
-1. Installs required apt packages (Xvfb, TigerVNC, ADB, OpenJDK)
-2. Downloads Android SDK cmdline-tools
-3. Downloads API 34 x86_64 system image
-4. Creates AVD (GameTest)
-5. Sets VNC password
-6. Creates auto-start script for Xvfb + VNC + emulator
-7. Installs pip packages
+1. Installs required apt packages (Xvfb, ADB, OpenJDK, git, ...)
+2. Installs Miniconda + pip packages (torch, opencv, scrcpy-client, pyzmq)
+3. Downloads Android SDK cmdline-tools
+4. Downloads API 34 x86_64 system image
+5. Creates AVD (GameTest)
+6. Clones and installs NitroGen
+7. Deploys pipeline code to `~/vla_pipeline/`
+8. Creates helper scripts (start_emulator.sh, stop_emulator.sh, watchdog_ng_rl.sh)
 
-Estimated time: approximately 10-20 minutes (depending on internet speed)
+Estimated time: approximately 15-20 minutes (depending on internet speed)
 
-### 3-3. Verify Server Screen via VNC
+### 3-3. Verify Setup
 
-After server setup is complete, connect using RealVNC Viewer or TigerVNC Viewer.
+After setup completes, start the emulator and open the viewer:
 
+```bash
+# On the server (SSH)
+bash ~/vla_pipeline/start_emulator.sh
+
+# On local PC
+python viewer.py
 ```
-Address: YOUR_SERVER_IP:5901
-Password: VNC_PASSWORD from config.py
-```
 
-If the emulator screen is visible, setup is successful.
+Open `http://localhost:8080` — if the emulator screen appears, setup is successful.
 
 ---
 
@@ -201,7 +201,7 @@ print('Upload complete')
 
 ### 4-3. First Game Launch and Setup
 
-Several popups appear on the first launch. Proceed manually while watching via VNC:
+Several popups appear on the first launch. Use `viewer.py` (`http://localhost:8080`) to watch and interact with the screen:
 
 1. Language selection -> English
 2. Ad consent popup -> Accept or close with X
@@ -566,7 +566,7 @@ Or the pipeline's `ensure_game_foreground()` function handles this automatically
 
 Symptom: game does not start, only popup keeps appearing
 
-Connect to the server screen via VNC and press the BACK key 2-3 times:
+Use `viewer.py` (`http://localhost:8080`) to right-click (long press) or use the BACK key via SSH:
 
 ```bash
 adb -s emulator-5554 shell input keyevent KEYCODE_BACK
