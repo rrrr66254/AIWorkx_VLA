@@ -151,10 +151,15 @@ def main():
             print(f"[NG-RL] scrcpy failed ({e}), falling back to ADB screencap")
             capture = None
 
+    SCRCPY_MAX_FRAME_AGE = 2.0   # seconds; fall back to ADB if no new frame
+
     def get_frame():
         if capture is not None:
-            f = capture.get_frame()
-            return f if f is not None else env.capture_screen()
+            age = time.time() - capture.last_frame_time
+            if age < SCRCPY_MAX_FRAME_AGE:
+                f = capture.get_frame()
+                return f if f is not None else env.capture_screen()
+        # scrcpy stalled or not running -> use ADB screencap (always fresh)
         return env.capture_screen()
 
     nitrogen = build_client(

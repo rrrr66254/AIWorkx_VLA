@@ -33,6 +33,7 @@ class ScrcpyCapture:
         self._fps_count = 0
         self._fps_time  = time.time()
         self.current_fps = 0.0
+        self.last_frame_time = 0.0   # timestamp of most recent frame received
 
     def start(self, timeout: float = 15.0):
         """Start the scrcpy client. Wait for first frame within timeout seconds."""
@@ -50,6 +51,7 @@ class ScrcpyCapture:
             if frame is not None:
                 with self._lock:
                     self._latest = frame
+                self.last_frame_time = time.time()
                 self._ready.set()
                 # calculate fps
                 self._fps_count += 1
