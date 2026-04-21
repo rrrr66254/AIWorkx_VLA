@@ -20,11 +20,10 @@ SERVER_PORT = int(os.environ.get("VLA_PORT", "22"))
 SERVER_USER = os.environ.get("VLA_USER", "YOUR_USERNAME")     # e.g. "john"
 SERVER_PASS = os.environ.get("VLA_PASS", "YOUR_PASSWORD")
 
-# ── VNC settings ────────────────────────────────────────────────────────
-VNC_DISPLAY  = ":1"
-VNC_PORT     = 5901
-VNC_PASSWORD = os.environ.get("VLA_VNC_PASS", "YOUR_VNC_PASSWORD")
-VNC_GEOMETRY = "1280x800"
+# ── Virtual display (Xvfb, for headless emulator) ───────────────────────
+# The emulator runs on Xvfb :1. No VNC needed.
+# Monitoring is done via viewer.py (SSH + ADB screencap / scrcpy).
+XVFB_DISPLAY = ":1"
 
 # ── Remote paths (auto-derived from SERVER_USER) ────────────────────────
 # These do not need to be changed unless you use a non-standard home directory.
