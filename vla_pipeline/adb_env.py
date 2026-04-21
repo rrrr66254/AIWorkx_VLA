@@ -13,9 +13,7 @@ def _find_adb():
     if found:
         return found
     candidates = [
-        "/home/sltrain/android-sdk/platform-tools/adb",
         os.path.expanduser("~/android-sdk/platform-tools/adb"),
-        "C:/Users/rrrr6/AppData/Local/Android/Sdk/platform-tools/adb.exe",
     ]
     for p in candidates:
         if os.path.isfile(p):

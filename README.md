@@ -158,14 +158,45 @@ adb wait-for-device
 adb devices
 ```
 
-### 4-2. APK Installation
+### 4-2. APK Download and Installation
 
-Subway Surfers APK (version 3.61.1 recommended):
+The APK is not included in this repository. Download it from APKPure or APKMirror.
+
+**Recommended version: Subway Surfers 3.6.x (API 23+, x86_64)**
+
+Download links:
+- https://apkpure.com/subway-surfers/com.kiloo.subwaysurf
+- https://www.apkmirror.com/?s=subway+surfers
+
+Look for: `com.kiloo.subwaysurf_X.XX.X-XXXXX_minAPI23(x86_64).apk`
+
+**Transfer the APK to the server:**
 
 ```bash
-adb -s emulator-5554 install subway-surfers-3-61-1.xapk
-# or
-adb -s emulator-5554 install com.kiloo.subwaysurf_3.62.0-90863_minAPI23.apk
+# From local PC — copy APK to server via SCP
+scp subway-surfers.apk YOUR_USERNAME@YOUR_SERVER_IP:~/
+
+# Or use the SFTP helper (add to deploy.py or run manually)
+python -c "
+import paramiko
+from config import SERVER_HOST, SERVER_PORT, SERVER_USER, SERVER_PASS, REMOTE_HOME
+c = paramiko.SSHClient()
+c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+c.connect(SERVER_HOST, SERVER_PORT, SERVER_USER, SERVER_PASS)
+c.open_sftp().put('subway-surfers.apk', f'{REMOTE_HOME}/subway-surfers.apk')
+print('Upload complete')
+"
+```
+
+**Install on the emulator (run on server):**
+
+```bash
+# Make sure emulator is running first
+~/android-sdk/platform-tools/adb -s emulator-5554 install ~/subway-surfers.apk
+
+# Verify installation
+~/android-sdk/platform-tools/adb shell pm list packages | grep subway
+# Expected: package:com.kiloo.subwaysurf
 ```
 
 ### 4-3. First Game Launch and Setup
@@ -613,15 +644,28 @@ Checkpoint: `~/vla_pipeline/rl_cnn_checkpoint.pt`
 Steps for a team member to follow from scratch:
 
 ```
-1. cp config.example.py config.py   -- fill in your server IP, username, password
-2. python server_setup.py           -- automated server environment setup (~10 min)
-3. Verify server connection via VNC (YOUR_SERVER_IP:5901)
-4. Install APK on emulator and launch game for the first time (manual, via VNC)
-5. Start NitroGen server on the server:
-     cd ~/NitroGen && nohup python scripts/serve.py ng.pt --port 5556 &
-6. python deploy.py                 -- upload latest code to server
-7. python viewer.py                 -- launch local monitoring (http://localhost:8080)
-8. Click "Start NitroGen" in the browser
-   or directly on server: bash ~/vla_pipeline/watchdog_ng_rl.sh &
-9. Monitor training progress via VNC + viewer.py
+1. cp config.example.py config.py
+   -- fill in SERVER_HOST, SERVER_USER, SERVER_PASS
+
+2. python server_setup.py
+   -- installs Xvfb, Android SDK, AVD, Miniconda, pip packages,
+      NitroGen, pipeline code, and helper scripts (~15-20 min)
+
+3. Download Subway Surfers APK (see Section 4-2) and transfer to server:
+   scp subway-surfers.apk YOUR_USERNAME@YOUR_SERVER_IP:~/
+
+4. On the server (SSH in):
+   bash ~/vla_pipeline/start_emulator.sh
+   ~/android-sdk/platform-tools/adb install ~/subway-surfers.apk
+
+5. Launch the game once manually via viewer.py to dismiss first-run popups:
+   -- python viewer.py  ->  http://localhost:8080
+   -- Click through: language selection, ad consent, login popup, daily login
+
+6. Place NitroGen weights on the server:
+   -- Copy ng.pt to ~/NitroGen/ng.pt
+
+7. python viewer.py  ->  http://localhost:8080
+   Click "Start NitroGen" to begin training.
+   (or on server: nohup bash ~/vla_pipeline/watchdog_ng_rl.sh &)
 ```

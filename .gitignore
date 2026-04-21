@@ -1,20 +1,20 @@
-# 서버 접속 정보 (절대 공개 금지)
+# Server credentials (never commit)
 config.py
 *.env
 
-# Python 캐시
+# Python cache
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
 
-# 체크포인트 / 모델 가중치
+# Checkpoints / model weights
 *.pt
 *.pth
 *.ckpt
 
-# 디버그 스크린샷
+# Debug screenshots
 screenshot_*.png
 screen_*.png
 screen*.png
@@ -22,29 +22,29 @@ current_screen.png
 analysis_frames/
 fresh_frames/
 
-# 세션 기록 출력 (프레임 + JSONL)
+# Session recordings (frames + JSONL)
 vla_pipeline/output/
 
-# APK 파일 (용량 큼)
+# APK files (large binaries)
 *.apk
 *.xapk
 
-# 한국연구재단 제출 문서 (개인 과제 서류)
+# Personal documents
 drive-download-*/
 *.hwp
 *.zip
 *.pdf
 R&D_Proposal_*.docx
-별첨*.docx
+*.docx
+*.pptx
 [공고문]*.pdf
-2.\ 2026*.zip
 
-# 로컬 IDE / Claude 설정
+# Local IDE / Claude settings
 .claude/
 .vscode/
 *.idea/
 
-# 임시 스크립트 (배포/복구용)
+# Temporary / one-off scripts
 fix_and_restart.py
 game_setup.py
 close_popup_play.py
@@ -52,6 +52,7 @@ final_setup.py
 grab_screen.py
 quick_check.py
 status_check.py
+pipeline_new.py
 
-# 로그
+# Logs
 *.log

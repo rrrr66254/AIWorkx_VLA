@@ -45,10 +45,9 @@ class NitrogenServerClient:
     def __init__(self, host: str = "localhost", port: int = 5556):
         try:
             import sys, os
-            # add path if NitroGen is at /home/sltrain/NitroGen or local location
-            for p in ["/home/sltrain/NitroGen", os.path.expanduser("~/NitroGen")]:
-                if os.path.isdir(p) and p not in sys.path:
-                    sys.path.insert(0, p)
+            nitrogen_path = os.path.expanduser("~/NitroGen")
+            if os.path.isdir(nitrogen_path) and nitrogen_path not in sys.path:
+                sys.path.insert(0, nitrogen_path)
             from nitrogen.inference_client import ModelClient
             self._client = ModelClient(host=host, port=port)
         except ImportError:
