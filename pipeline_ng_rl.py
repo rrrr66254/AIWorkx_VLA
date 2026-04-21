@@ -214,30 +214,29 @@ def main():
             # 1. Capture screen (scrcpy or ADB)
             frame = get_frame()
 
-            # 2. Detect game state (every 3 steps)
-            if step % 3 == 0:
-                # check if game is in foreground (every 30 steps)
-                if step % 30 == 0:
-                    ensure_game_foreground(env)
+            # 2. Detect game state (every step — pixel read is O(1), no overhead)
+            # ensure_game_foreground is an ADB call, keep throttled to every 30 steps
+            if step % 30 == 0:
+                ensure_game_foreground(env)
 
-                if detect_continue_dialog(frame):
-                    if prev_state is not None:
-                        ns = DQNAgent.zero_state()
-                        agent.store(prev_state, prev_action, -1.0, ns, True)
-                        prev_state = prev_action = None
-                    step += 1
-                    time.sleep(0.5)
-                    continue
+            if detect_continue_dialog(frame):
+                if prev_state is not None:
+                    ns = DQNAgent.zero_state()
+                    agent.store(prev_state, prev_action, -1.0, ns, True)
+                    prev_state = prev_action = None
+                step += 1
+                time.sleep(0.5)
+                continue
 
-                if detect_game_over(frame):
-                    if prev_state is not None:
-                        ns = DQNAgent.zero_state()
-                        agent.store(prev_state, prev_action, -1.0, ns, True)
-                        prev_state = prev_action = None
-                    game_over_count += 1
-                    handle_game_over(env)
-                    step += 1
-                    continue
+            if detect_game_over(frame):
+                if prev_state is not None:
+                    ns = DQNAgent.zero_state()
+                    agent.store(prev_state, prev_action, -1.0, ns, True)
+                    prev_state = prev_action = None
+                game_over_count += 1
+                handle_game_over(env)
+                step += 1
+                continue
 
             # 3. NitroGen inference (always runs - state extraction + exploration policy)
             nitrogen_raw = nitrogen.infer(frame)
