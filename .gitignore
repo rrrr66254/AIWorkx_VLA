@@ -54,5 +54,8 @@ quick_check.py
 status_check.py
 pipeline_new.py
 
+# Image assets (research proposal figures, not needed for reproduction)
+이미지/
+
 # Logs
 *.log
