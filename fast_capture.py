@@ -1,11 +1,11 @@
 """
-scrcpy 기반 고속 화면 캡처.
-ADB screencap(~1fps) → scrcpy 스트리밍(~15-30fps)
+scrcpy-based high-speed screen capture.
+ADB screencap (~1fps) -> scrcpy streaming (~15-30fps)
 
-사용:
+Usage:
   cap = ScrcpyCapture(device="emulator-5554")
   cap.start()
-  frame = cap.get_frame()   # numpy BGR, 최신 프레임 즉시 반환
+  frame = cap.get_frame()   # numpy BGR, returns latest frame immediately
   cap.stop()
 """
 import threading
@@ -18,8 +18,8 @@ class ScrcpyCapture:
         self,
         device: str = "emulator-5554",
         max_fps: int = 30,
-        max_width: int = 0,         # 0 = 원본 해상도 유지 (1080×2280)
-        bitrate: int = 4_000_000,   # 4Mbps - 충분한 화질, 적은 CPU
+        max_width: int = 0,         # 0 = keep original resolution (1080x2280)
+        bitrate: int = 4_000_000,   # 4Mbps - sufficient quality, low CPU
     ):
         self.device    = device
         self.max_fps   = max_fps
@@ -35,7 +35,7 @@ class ScrcpyCapture:
         self.current_fps = 0.0
 
     def start(self, timeout: float = 15.0):
-        """scrcpy 클라이언트 시작. timeout 초 내에 첫 프레임 대기."""
+        """Start the scrcpy client. Wait for first frame within timeout seconds."""
         import scrcpy
 
         self._client = scrcpy.Client(
@@ -51,7 +51,7 @@ class ScrcpyCapture:
                 with self._lock:
                     self._latest = frame
                 self._ready.set()
-                # fps 계산
+                # calculate fps
                 self._fps_count += 1
                 now = time.time()
                 if now - self._fps_time >= 2.0:
@@ -59,23 +59,23 @@ class ScrcpyCapture:
                     self._fps_count = 0
                     self._fps_time  = now
 
-        # add_listener API 사용 (on() 데코레이터 없는 버전 대응)
+        # use add_listener API (compatible with versions without on() decorator)
         self._client.add_listener(scrcpy.EVENT_FRAME, on_frame)
         self._client.start(threaded=True)
 
-        # 첫 프레임 대기
+        # wait for first frame
         if not self._ready.wait(timeout=timeout):
-            raise TimeoutError(f"[ScrcpyCapture] {timeout}초 내 첫 프레임 수신 실패")
+            raise TimeoutError(f"[ScrcpyCapture] Failed to receive first frame within {timeout}s")
 
         h, w = self._latest.shape[:2]
-        print(f"[ScrcpyCapture] 시작: {w}×{h}  max_fps={self.max_fps}")
+        print(f"[ScrcpyCapture] Started: {w}x{h}  max_fps={self.max_fps}")
 
     def get_frame(self) -> np.ndarray:
-        """최신 프레임 반환 (numpy BGR). start() 이전엔 None."""
+        """Return latest frame (numpy BGR). Returns None before start() is called."""
         with self._lock:
             return self._latest
 
     def stop(self):
         if self._client:
             self._client.stop()
-        print("[ScrcpyCapture] 종료")
+        print("[ScrcpyCapture] Stopped")

@@ -1,6 +1,6 @@
 """
-세션 레코더 — frame + action + telemetry를 JSONL + PNG로 저장.
-나중에 fine-tuning 데이터로 활용 가능한 포맷.
+Session recorder — saves frame + action + telemetry as JSONL + PNG.
+Format suitable for use as fine-tuning data later.
 """
 import json, os, time
 from pathlib import Path
@@ -28,7 +28,7 @@ class SessionRecorder:
         self._jsonl_path = self.session_dir / "data.jsonl"
         self._file = open(self._jsonl_path, "w", encoding="utf-8")
         self._step = 0
-        print(f"[Recorder] 세션 시작: {self.session_dir}")
+        print(f"[Recorder] Session started: {self.session_dir}")
 
     def record(self,
                frame: np.ndarray,
@@ -53,4 +53,4 @@ class SessionRecorder:
     def close(self):
         self._file.flush()
         self._file.close()
-        print(f"[Recorder] 저장 완료: {self._step}스텝 → {self.session_dir}")
+        print(f"[Recorder] Save complete: {self._step} steps -> {self.session_dir}")

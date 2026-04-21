@@ -1,51 +1,51 @@
 """
-NitroGen 게임패드 출력(20-dim) → ADB touch 액션 변환.
+NitroGen gamepad output (20-dim) -> ADB touch action conversion.
 
-NitroGen 출력 구조 (20-dim):
-  [0]  LX  (-32767 ~ 32767)  왼쪽 스틱 X
-  [1]  LY  (-32767 ~ 32767)  왼쪽 스틱 Y
-  [2]  RX  (-32767 ~ 32767)  오른쪽 스틱 X
-  [3]  RY  (-32767 ~ 32767)  오른쪽 스틱 Y
+NitroGen output structure (20-dim):
+  [0]  LX  (-32767 ~ 32767)  Left stick X
+  [1]  LY  (-32767 ~ 32767)  Left stick Y
+  [2]  RX  (-32767 ~ 32767)  Right stick X
+  [3]  RY  (-32767 ~ 32767)  Right stick Y
   [4]  DPAD_UP     (0/1)
   [5]  DPAD_DOWN   (0/1)
   [6]  DPAD_LEFT   (0/1)
   [7]  DPAD_RIGHT  (0/1)
-  [8]  A           (0/1)   → tap
-  [9]  B           (0/1)   → long press
+  [8]  A           (0/1)   -> tap
+  [9]  B           (0/1)   -> long press
   [10] X           (0/1)
   [11] Y           (0/1)
   [12] LB          (0/1)
   [13] RB          (0/1)
-  [14] LT  (0~1 연속)
-  [15] RT  (0~1 연속)
+  [14] LT  (0~1 continuous)
+  [15] RT  (0~1 continuous)
   [16] L3          (0/1)
   [17] R3          (0/1)
   [18] START       (0/1)
   [19] BACK        (0/1)
 
-매핑 전략 (커서 기반):
-  LX, LY → 화면 내 가상 커서 이동
-  A      → 커서 위치 tap
-  B      → 커서 위치 long press
-  D-pad  → 방향 swipe (고정 거리 0.3)
-  나머지 → 미사용 (noop)
+Mapping strategy (cursor-based):
+  LX, LY -> virtual cursor movement on screen
+  A      -> tap at cursor position
+  B      -> long press at cursor position
+  D-pad  -> directional swipe (fixed distance 0.3)
+  others -> unused (noop)
 """
 import math
 from dataclasses import dataclass
 
 JOYSTICK_MAX  = 1.0
-DEAD_ZONE     = 0.2    # 이 이하 magnitude 는 커서 이동 안 함
-CURSOR_SPEED  = 0.04   # 스텝당 커서 이동 비율
-SWIPE_DIST    = 0.30   # D-pad swipe 거리 (화면 비율)
-BUTTON_THRES  = 0.5    # 버튼 활성화 임계값
+DEAD_ZONE     = 0.2    # cursor does not move below this magnitude
+CURSOR_SPEED  = 0.04   # cursor movement ratio per step
+SWIPE_DIST    = 0.30   # D-pad swipe distance (screen ratio)
+BUTTON_THRES  = 0.5    # button activation threshold
 
 
 @dataclass
 class ADBAction:
     type: str          # "tap" | "swipe" | "long_press" | "noop"
-    x:    float = 0.5  # 정규화 좌표 [0,1]
+    x:    float = 0.5  # normalized coordinates [0,1]
     y:    float = 0.5
-    x2:   float = 0.5  # swipe 끝점
+    x2:   float = 0.5  # swipe endpoint
     y2:   float = 0.5
     duration_ms: int = 200
 
@@ -70,8 +70,8 @@ class ActionMapper:
 
     def map(self, output: list | dict) -> ADBAction:
         """
-        NitroGen 20-dim 출력 → ADBAction.
-        output: list[float] 또는 dict (NitroGen inference 결과 포맷 모두 지원)
+        NitroGen 20-dim output -> ADBAction.
+        output: list[float] or dict (supports both NitroGen inference result formats)
         """
         vec = self._to_vec(output)
 
@@ -84,13 +84,13 @@ class ActionMapper:
         dpad_l  = vec[6]  > BUTTON_THRES
         dpad_r  = vec[7]  > BUTTON_THRES
 
-        # 커서 이동
+        # cursor movement
         mag = math.sqrt(lx**2 + ly**2)
         if mag > DEAD_ZONE:
             self.cursor_x = max(0.0, min(1.0, self.cursor_x + lx * CURSOR_SPEED))
             self.cursor_y = max(0.0, min(1.0, self.cursor_y + ly * CURSOR_SPEED))
 
-        # D-pad → swipe (우선순위 높음)
+        # D-pad -> swipe (higher priority)
         cx, cy = self.cursor_x, self.cursor_y
         if dpad_u:
             return ADBAction("swipe", cx, cy, cx, max(0.0, cy - SWIPE_DIST), 200)
@@ -101,7 +101,7 @@ class ActionMapper:
         if dpad_r:
             return ADBAction("swipe", cx, cy, min(1.0, cx + SWIPE_DIST), cy, 200)
 
-        # 버튼
+        # buttons
         if btn_b:
             return ADBAction("long_press", cx, cy, duration_ms=800)
         if btn_a:
@@ -109,15 +109,15 @@ class ActionMapper:
 
         return ADBAction("noop")
 
-    # ── 포맷 정규화 ───────────────────────────────────────────
+    # ── Format Normalization ──────────────────────────────────
 
     @staticmethod
     def _to_vec(output) -> list:
         if isinstance(output, list):
             return output + [0.0] * max(0, 20 - len(output))
 
-        # NitroGen inference_client.py 출력: {j_left:(N,2), j_right:(N,2), buttons:(N,M)}
-        # action horizon N개 예측 중 첫 번째 타임스텝만 사용
+        # NitroGen inference_client.py output: {j_left:(N,2), j_right:(N,2), buttons:(N,M)}
+        # use only the first timestep out of N action horizon predictions
         if isinstance(output, dict):
             import numpy as np
             vec = [0.0] * 20
@@ -138,4 +138,4 @@ class ActionMapper:
                 vec[4 + i] = float(v)
             return vec
 
-        raise TypeError(f"지원하지 않는 출력 타입: {type(output)}")
+        raise TypeError(f"Unsupported output type: {type(output)}")

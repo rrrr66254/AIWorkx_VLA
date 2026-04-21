@@ -1,19 +1,19 @@
 """
-NitroGen-guided RL 파이프라인.
+NitroGen-guided RL pipeline.
 
-NitroGen이 게임 화면을 보고 gamepad 신호를 출력하면:
-  - 탐험 단계 (ε 확률): NitroGen 액션 그대로 실행  ← 교사 역할
-  - 활용 단계 (1-ε 확률): RL이 학습한 액션 실행    ← 학습 결과
+When NitroGen watches the game screen and outputs a gamepad signal:
+  - Exploration phase (epsilon probability): execute NitroGen action directly  <- teacher role
+  - Exploitation phase (1-epsilon probability): execute action learned by RL   <- training result
 
-훈련 진행:
-  ε = 1.0  → 100% NitroGen (초반: NitroGen 플레이 데이터 수집)
-  ε = 0.5  → 50% NitroGen + 50% RL
-  ε = 0.1  → 10% NitroGen + 90% RL (후반: RL이 NitroGen 초월)
+Training progress:
+  epsilon = 1.0  -> 100% NitroGen (early: collecting NitroGen play data)
+  epsilon = 0.5  -> 50% NitroGen + 50% RL
+  epsilon = 0.1  -> 10% NitroGen + 90% RL (late: RL surpasses NitroGen)
 
-사용법:
+Usage:
   python pipeline_ng_rl.py --device emulator-5554
   python pipeline_ng_rl.py --no-record
-  python pipeline_ng_rl.py --no-scrcpy   # scrcpy 비활성화 (ADB 폴백)
+  python pipeline_ng_rl.py --no-scrcpy   # disable scrcpy (ADB fallback)
 """
 import argparse, os, signal, sys, time, subprocess
 import numpy as np
@@ -28,11 +28,11 @@ from visualizer     import draw_action, draw_telemetry
 from rl_agent       import DQNAgent, ACTION_NAMES
 
 
-# ── 게임 상태 감지 ──────────────────────────────────────────────
+# ── Game State Detection ────────────────────────────────────────────
 DETECT_PX_X,   DETECT_PX_Y   = 800, 2104
 PLAY_TAP_X,    PLAY_TAP_Y    = 810, 2220
-POPUP_CLOSE_X, POPUP_CLOSE_Y = 820, 175   # 결과화면 작은 X 버튼
-IAP_CLOSE_X,   IAP_CLOSE_Y   = 1040, 248  # IAP 팝업 (Permanent score boost 등) X 버튼
+POPUP_CLOSE_X, POPUP_CLOSE_Y = 820, 175   # result screen small X button
+IAP_CLOSE_X,   IAP_CLOSE_Y   = 1040, 248  # IAP popup (Permanent score boost etc.) X button
 CONTINUE_PX_X, CONTINUE_PX_Y = 540, 860
 
 GAME_PKG   = "com.kiloo.subwaysurf"
@@ -55,15 +55,15 @@ def detect_continue_dialog(frame: np.ndarray) -> bool:
 
 
 def ensure_game_foreground(env: ADBEnv) -> bool:
-    """게임이 포그라운드가 아니면 재실행. 재실행했으면 True 반환."""
+    """If game is not in foreground, relaunch it. Returns True if relaunched."""
     try:
         output = env._run(["shell", "dumpsys", "activity", "activities"], timeout=5)
         if GAME_PKG not in output:
-            print("[NG-RL] 게임 비포그라운드 감지 → 재실행")
+            print("[NG-RL] Game not in foreground -> relaunching")
             env._run(["shell", "monkey", "-p", GAME_PKG,
                       "-c", "android.intent.category.LAUNCHER", "1"], timeout=5)
             time.sleep(3.0)
-            # 팝업 닫기 후 PLAY
+            # close popups then PLAY
             env._run(["shell", "input", "tap", str(IAP_CLOSE_X), str(IAP_CLOSE_Y)])
             time.sleep(0.3)
             env._run(["shell", "input", "keyevent", "KEYCODE_BACK"])
@@ -74,32 +74,32 @@ def ensure_game_foreground(env: ADBEnv) -> bool:
             time.sleep(0.8)
             return True
     except Exception as e:
-        print(f"[NG-RL] ensure_game_foreground 오류: {e}")
+        print(f"[NG-RL] ensure_game_foreground error: {e}")
     return False
 
 
 def handle_game_over(env: ADBEnv):
-    """게임 오버 화면 → 팝업 닫기 → PLAY 재시작."""
-    print("[NG-RL] 게임 오버 → 재시작")
-    # 1) IAP 팝업 X 버튼 (오른쪽 상단 빨간 원)
+    """Game over screen -> close popups -> restart PLAY."""
+    print("[NG-RL] Game over -> restart")
+    # 1) IAP popup X button (red circle top-right)
     env._run(["shell", "input", "tap", str(IAP_CLOSE_X), str(IAP_CLOSE_Y)])
     time.sleep(0.25)
-    # 2) 기존 결과화면 X 버튼
+    # 2) Result screen X button
     env._run(["shell", "input", "tap", str(POPUP_CLOSE_X), str(POPUP_CLOSE_Y)])
     time.sleep(0.25)
-    # 3) BACK 키로 남은 팝업 닫기
+    # 3) Close remaining popups with BACK key
     env._run(["shell", "input", "keyevent", "KEYCODE_BACK"])
     time.sleep(0.3)
-    # 4) PLAY 버튼
+    # 4) PLAY button
     env._run(["shell", "input", "tap", str(PLAY_TAP_X), str(PLAY_TAP_Y)])
     time.sleep(0.8)
-    # 5) 캐릭터 선택 / 게임 시작 확인 탭
+    # 5) Character selection / game start confirmation tap
     env._run(["shell", "input", "tap", "540", "1200"])
     time.sleep(0.8)
 
 
 def action_dict_to_idx(d: dict) -> int:
-    """ADB action dict → 0~4 인덱스 변환."""
+    """ADB action dict -> index 0~4 conversion."""
     if d.get("type") == "noop":
         return 0
     if d.get("type") == "swipe":
@@ -121,14 +121,14 @@ def parse_args():
     p.add_argument("--nitrogen-host", default="localhost")
     p.add_argument("--nitrogen-port", type=int, default=5556)
     p.add_argument("--dummy",         action="store_true")
-    p.add_argument("--no-scrcpy",     action="store_true", help="scrcpy 비활성화, ADB screencap 사용")
+    p.add_argument("--no-scrcpy",     action="store_true", help="disable scrcpy, use ADB screencap")
     return p.parse_args()
 
 
 def auto_detect_device() -> str:
     devices = ADBEnv.list_devices()
     if not devices:
-        print("[NG-RL] ADB 기기 없음.")
+        print("[NG-RL] No ADB device found.")
         sys.exit(1)
     return devices[0]
 
@@ -136,19 +136,19 @@ def auto_detect_device() -> str:
 def main():
     args   = parse_args()
     device = args.device or auto_detect_device()
-    print(f"[NG-RL] 기기: {device}  |  NitroGen-guided Double DQN")
+    print(f"[NG-RL] Device: {device}  |  NitroGen-guided Double DQN")
 
     env      = ADBEnv(device)
     mapper   = ActionMapper()
 
-    # ── scrcpy 고속 캡처 ──────────────────────────────────────
+    # ── scrcpy high-speed capture ─────────────────────────────────
     capture = None
     if not args.no_scrcpy:
         try:
             capture = ScrcpyCapture(device=device, max_fps=30)
             capture.start(timeout=20)
         except Exception as e:
-            print(f"[NG-RL] scrcpy 실패({e}), ADB screencap으로 폴백")
+            print(f"[NG-RL] scrcpy failed ({e}), falling back to ADB screencap")
             capture = None
 
     def get_frame():
@@ -165,23 +165,23 @@ def main():
     telemetry = TelemetryCollector(device_serial=device, interval_ms=500)
     recorder  = SessionRecorder(args.output_dir) if not args.no_record else None
 
-    # ── RL 에이전트 (FC, 23D 상태) ───────────────────────────
+    # ── RL agent (FC, 23D state) ──────────────────────────────────
     agent = DQNAgent(
         device          = "cuda",
         epsilon_start   = 1.0,
-        epsilon_end     = 0.10,    # 최소 10%는 NitroGen 탐험 유지
-        epsilon_decay   = 0.998,   # ε=0.1 도달: ~3,000 학습스텝 ≈ 3~4시간
+        epsilon_end     = 0.10,    # keep at least 10% NitroGen exploration
+        epsilon_decay   = 0.998,   # reach epsilon=0.1: ~3,000 train steps ~ 3-4 hours
     )
     if os.path.exists(RL_CKPT):
         agent.load(RL_CKPT)
-        print(f"[NG-RL] 체크포인트 로드: ε={agent.epsilon:.3f}")
+        print(f"[NG-RL] Checkpoint loaded: epsilon={agent.epsilon:.3f}")
     else:
-        print(f"[NG-RL] 새 에이전트 시작 (ε={agent.epsilon:.2f})")
-        print("[NG-RL] 초반에는 NitroGen이 100% 플레이합니다.")
+        print(f"[NG-RL] Starting new agent (epsilon={agent.epsilon:.2f})")
+        print("[NG-RL] NitroGen plays 100% in the early stage.")
 
     env.wait_for_device()
     w, h = env.get_screen_size()
-    print(f"[NG-RL] 화면 크기: {w}x{h}")
+    print(f"[NG-RL] Screen size: {w}x{h}")
     telemetry.start()
 
     running = True
@@ -196,22 +196,22 @@ def main():
     prev_state      = None
     prev_action     = None
     rl_loss         = None
-    ng_count        = 0   # NitroGen 액션 선택 횟수
-    rl_count        = 0   # RL 액션 선택 횟수
+    ng_count        = 0   # number of NitroGen action selections
+    rl_count        = 0   # number of RL action selections
 
-    print("[NG-RL] 시작. Ctrl+C로 종료.")
+    print("[NG-RL] Starting. Press Ctrl+C to stop.")
     print("-" * 60)
 
     try:
         while running:
             t0 = time.time()
 
-            # 1. 화면 캡처 (scrcpy or ADB)
+            # 1. Capture screen (scrcpy or ADB)
             frame = get_frame()
 
-            # 2. 게임 상태 감지 (3스텝마다)
+            # 2. Detect game state (every 3 steps)
             if step % 3 == 0:
-                # 게임이 포그라운드인지 확인 (30스텝마다)
+                # check if game is in foreground (every 30 steps)
                 if step % 30 == 0:
                     ensure_game_foreground(env)
 
@@ -234,25 +234,25 @@ def main():
                     step += 1
                     continue
 
-            # 3. NitroGen 추론 (항상 실행 - 상태 추출 + 탐험 정책)
+            # 3. NitroGen inference (always runs - state extraction + exploration policy)
             nitrogen_raw = nitrogen.infer(frame)
             state        = agent.extract_state(nitrogen_raw)
 
-            # 4. 이전 transition 저장 (생존 보상 +0.1)
+            # 4. Store previous transition (survival reward +0.1)
             if prev_state is not None:
                 agent.store(prev_state, prev_action, +0.1, state, False)
 
-            # 5. 액션 결정: ε → NitroGen,  1-ε → RL
+            # 5. Action selection: epsilon -> NitroGen,  1-epsilon -> RL
             import random
             if random.random() < agent.epsilon:
-                # 탐험: NitroGen 액션 사용
+                # exploration: use NitroGen action
                 ng_adb    = mapper.map(nitrogen_raw)
                 action_dict = ng_adb.to_dict()
                 action_idx  = action_dict_to_idx(action_dict)
                 ng_count   += 1
                 src = "NG"
             else:
-                # 활용: RL 학습 액션
+                # exploitation: RL learned action
                 action_idx  = agent.select_action(state)
                 action_dict = agent.get_action_dict(action_idx)
                 rl_count   += 1
@@ -262,31 +262,31 @@ def main():
             prev_action = action_idx
             agent.total_steps += 1
 
-            # 6. 학습 (4스텝마다)
+            # 6. Train (every 4 steps)
             if step % 4 == 0:
                 rl_loss = agent.train()
 
-            # 7. 체크포인트 저장
+            # 7. Save checkpoint
             if step % SAVE_EVERY == 0 and step > 0:
                 agent.save(RL_CKPT)
                 total_acts = ng_count + rl_count
                 ng_pct = 100 * ng_count / max(total_acts, 1)
-                print(f"[NG-RL] 저장: ε={agent.epsilon:.3f}  "
+                print(f"[NG-RL] Saved: epsilon={agent.epsilon:.3f}  "
                       f"env_steps={agent.total_steps}  "
                       f"best={agent.best_episode_reward:.2f}  "
                       f"NG:{ng_pct:.0f}% RL:{100-ng_pct:.0f}%")
 
-            # 8. 액션 실행
+            # 8. Execute action
             env.execute(action_dict)
 
-            # 9. 텔레메트리 + 기록
+            # 9. Telemetry + recording
             tele = telemetry.get_latest()
             if recorder:
                 viz = draw_action(frame, action_dict)
                 viz = draw_telemetry(viz, tele)
                 recorder.record(viz, action_dict, nitrogen_raw, tele)
 
-            # 10. 콘솔 출력 (5스텝마다)
+            # 10. Console output (every 5 steps)
             step += 1
             if step % 5 == 0:
                 elapsed  = time.time() - t0
@@ -298,7 +298,7 @@ def main():
                 scrcpy_fps = f"{capture.current_fps:.0f}" if capture else "ADB"
                 print(
                     f"  step={step:5d} | {src}:{aname:5s} | "
-                    f"ε={agent.epsilon:.3f} | loss={loss_str} | "
+                    f"e={agent.epsilon:.3f} | loss={loss_str} | "
                     f"buf={len(agent.buffer):5d} | "
                     f"NG:{ng_pct:.0f}%|RL:{100-ng_pct:.0f}% | "
                     f"cap={scrcpy_fps}fps | dies={game_over_count}"
@@ -313,18 +313,18 @@ def main():
         agent.save(RL_CKPT)
         total_acts = ng_count + rl_count
         ng_pct = 100 * ng_count / max(total_acts, 1)
-        print(f"\n[NG-RL] 최종 저장: ε={agent.epsilon:.3f}  "
+        print(f"\n[NG-RL] Final save: epsilon={agent.epsilon:.3f}  "
               f"env_steps={agent.total_steps}  "
               f"episodes={agent.episode_count}  "
               f"best={agent.best_episode_reward:.2f}")
-        print(f"[NG-RL] 액션 비율: NitroGen {ng_pct:.0f}%  /  RL {100-ng_pct:.0f}%")
+        print(f"[NG-RL] Action ratio: NitroGen {ng_pct:.0f}%  /  RL {100-ng_pct:.0f}%")
         telemetry.stop()
         nitrogen.close()
         if capture:
             capture.stop()
         if recorder:
             recorder.close()
-        print("\n[NG-RL] 종료 완료.")
+        print("\n[NG-RL] Shutdown complete.")
 
 
 if __name__ == "__main__":

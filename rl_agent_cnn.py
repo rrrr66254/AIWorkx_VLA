@@ -1,12 +1,12 @@
 """
 CNN DQN Agent for Subway Surfers.
 
-State  : 4 stacked grayscale frames  (4 x 84 x 84), 화면 상단 65% 크롭
+State  : 4 stacked grayscale frames  (4 x 84 x 84), top 65% of screen cropped
 Actions: 0=NOOP  1=LEFT  2=RIGHT  3=UP  4=DOWN
 Reward : +0.1 per step survived, -1.0 on death
 Network: Double DQN (CNN encoder + FC head)
 
-사용:
+Usage:
   agent = CNNDQNAgent(device="cuda")
   agent.load("rl_cnn_checkpoint.pt")
   state  = agent.get_state(frame)        # (4,84,84) uint8
@@ -22,7 +22,7 @@ import torch.nn as nn
 from collections import deque
 
 
-# ── 액션 정의 ────────────────────────────────────────────────
+# ── Action Definitions ────────────────────────────────────────────────
 ACTION_NAMES = ["NOOP", "LEFT", "RIGHT", "UP", "DOWN"]
 ACTION_DICTS = {
     0: {"type": "noop"},
@@ -37,8 +37,8 @@ FRAME_W    = 84
 STACK_SIZE = 4
 ACTION_DIM = 5
 
-# 화면 크롭 (1080x2280 기준)
-# 상단 8%: 점수/HUD 건너뜀  |  하단 35%: 캐릭터 발밑 이하 건너뜀
+# Screen crop (based on 1080x2280)
+# Top 8%: skip score/HUD  |  Bottom 35%: skip below character's feet
 CROP_TOP_RATIO    = 0.08
 CROP_BOTTOM_RATIO = 0.65
 
@@ -46,20 +46,20 @@ CROP_BOTTOM_RATIO = 0.65
 # ── CNN Q-Network ─────────────────────────────────────────────
 class CNNQNetwork(nn.Module):
     """
-    표준 Atari-style CNN.
-    입력: (batch, 4, 84, 84)  float32  [0, 1]
+    Standard Atari-style CNN.
+    Input: (batch, 4, 84, 84)  float32  [0, 1]
     """
     def __init__(self):
         super().__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(STACK_SIZE, 32, kernel_size=8, stride=4),  # → 32 x 20 x 20
+            nn.Conv2d(STACK_SIZE, 32, kernel_size=8, stride=4),  # -> 32 x 20 x 20
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=4, stride=2),           # → 64 x  9 x  9
+            nn.Conv2d(32, 64, kernel_size=4, stride=2),           # -> 64 x  9 x  9
             nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1),           # → 64 x  7 x  7
+            nn.Conv2d(64, 64, kernel_size=3, stride=1),           # -> 64 x  7 x  7
             nn.ReLU(),
         )
-        # 출력 크기를 자동 계산
+        # Automatically compute output size
         with torch.no_grad():
             dummy = torch.zeros(1, STACK_SIZE, FRAME_H, FRAME_W)
             flat = self.conv(dummy).view(1, -1).shape[1]
@@ -76,7 +76,7 @@ class CNNQNetwork(nn.Module):
         return self.fc(h)
 
 
-# ── Replay Buffer (uint8로 저장해 메모리 절약) ────────────────
+# ── Replay Buffer (stored as uint8 to save memory) ────────────────
 class ReplayBuffer:
     def __init__(self, capacity: int = 20_000):
         self.buf = deque(maxlen=capacity)
@@ -113,8 +113,8 @@ class CNNDQNAgent:
         gamma: float         = 0.99,
         epsilon_start: float = 1.0,
         epsilon_end: float   = 0.05,
-        epsilon_decay: float = 0.9998,   # ε 0.05 도달: ~30,000 train_steps ≈ 16-18h
-        target_update: int   = 500,      # 학습 업데이트 500회마다 타겟 동기화
+        epsilon_decay: float = 0.9998,   # epsilon reaches 0.05 at ~30,000 train_steps ~= 16-18h
+        target_update: int   = 500,      # sync target every 500 training updates
         batch_size: int      = 32,
         buffer_size: int     = 20_000,
         device: str          = None,
@@ -141,12 +141,12 @@ class CNNDQNAgent:
         self.episode_count       = 0
         self.best_episode_reward = -float("inf")
 
-        # 프레임 스택 (게임 에피소드 단위로 reset_stack() 호출)
+        # Frame stack (call reset_stack() at the start of each game episode)
         self._stack = deque(maxlen=STACK_SIZE)
 
-    # ── 프레임 전처리 ─────────────────────────────────────────
+    # ── Frame Preprocessing ─────────────────────────────────────────
     def preprocess(self, frame: np.ndarray) -> np.ndarray:
-        """BGR numpy (H, W, 3)  →  grayscale 84×84 uint8."""
+        """BGR numpy (H, W, 3)  ->  grayscale 84x84 uint8."""
         import cv2
         h, w = frame.shape[:2]
         y1 = int(h * CROP_TOP_RATIO)
@@ -157,13 +157,13 @@ class CNNDQNAgent:
         return resized  # (84, 84) uint8
 
     def reset_stack(self, frame: np.ndarray):
-        """에피소드 시작 시 같은 프레임 4장으로 스택 채우기."""
+        """Fill the stack with 4 copies of the same frame at episode start."""
         f = self.preprocess(frame)
         for _ in range(STACK_SIZE):
             self._stack.append(f)
 
     def get_state(self, frame: np.ndarray) -> np.ndarray:
-        """프레임 → 스택에 추가 → (4, 84, 84) uint8 반환."""
+        """Add frame to stack and return (4, 84, 84) uint8."""
         self._stack.append(self.preprocess(frame))
         return np.array(self._stack, dtype=np.uint8)  # (4, 84, 84)
 
@@ -171,7 +171,7 @@ class CNNDQNAgent:
     def zero_state() -> np.ndarray:
         return np.zeros((STACK_SIZE, FRAME_H, FRAME_W), dtype=np.uint8)
 
-    # ── 액션 선택 (ε-greedy) ──────────────────────────────────
+    # ── Action Selection (epsilon-greedy) ──────────────────────────────────
     def select_action(self, state: np.ndarray) -> int:
         if random.random() < self.epsilon:
             return random.randrange(ACTION_DIM)
@@ -182,7 +182,7 @@ class CNNDQNAgent:
     def get_action_dict(self, action_idx: int) -> dict:
         return ACTION_DICTS[action_idx]
 
-    # ── Transition 저장 ───────────────────────────────────────
+    # ── Store Transition ───────────────────────────────────────
     def store(self, s, a, r, s2, done):
         self.buffer.push(s, a, r, s2, done)
         self.episode_reward += r
@@ -192,9 +192,9 @@ class CNNDQNAgent:
                 self.best_episode_reward = self.episode_reward
             self.episode_reward = 0.0
 
-    # ── 학습 ─────────────────────────────────────────────────
+    # ── Training ─────────────────────────────────────────────────
     def train(self):
-        """Double DQN 업데이트. loss 반환. 버퍼 부족 시 None."""
+        """Double DQN update. Returns loss. Returns None if buffer is insufficient."""
         if len(self.buffer) < self.batch_size:
             return None
 
@@ -205,10 +205,10 @@ class CNNDQNAgent:
         s2 = torch.FloatTensor(s2).to(self.device)
         d  = torch.FloatTensor(d).to(self.device)
 
-        # 현재 Q값
+        # Current Q values
         q_vals = self.q_net(s).gather(1, a.unsqueeze(1)).squeeze(1)
 
-        # Double DQN 타겟
+        # Double DQN target
         with torch.no_grad():
             best_a = self.q_net(s2).argmax(dim=1, keepdim=True)
             next_q = self.target_net(s2).gather(1, best_a).squeeze(1)
@@ -220,17 +220,17 @@ class CNNDQNAgent:
         nn.utils.clip_grad_norm_(self.q_net.parameters(), 10.0)
         self.optimizer.step()
 
-        # ε 감소
+        # Decay epsilon
         self.epsilon = max(self.epsilon_end, self.epsilon * self.epsilon_decay)
 
         self.train_steps += 1
         if self.train_steps % self.target_update == 0:
             self.target_net.load_state_dict(self.q_net.state_dict())
-            print(f"[CNN-RL] 타겟 네트워크 동기화 (train_step={self.train_steps})")
+            print(f"[CNN-RL] Target network synced (train_step={self.train_steps})")
 
         return float(loss.item())
 
-    # ── 저장 / 로드 ───────────────────────────────────────────
+    # ── Save / Load ───────────────────────────────────────────
     def save(self, path: str):
         torch.save({
             "q_net":               self.q_net.state_dict(),
@@ -252,7 +252,7 @@ class CNNDQNAgent:
         self.train_steps         = ckpt.get("train_steps",         0)
         self.episode_count       = ckpt.get("episode_count",       0)
         self.best_episode_reward = ckpt.get("best_episode_reward", -float("inf"))
-        print(f"[CNN-RL] Loaded: ε={self.epsilon:.4f}  "
+        print(f"[CNN-RL] Loaded: epsilon={self.epsilon:.4f}  "
               f"env_steps={self.total_steps}  "
               f"train_steps={self.train_steps}  "
               f"episodes={self.episode_count}  "

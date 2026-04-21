@@ -1,6 +1,6 @@
 """
-발열/성능 텔레메트리 수집기 — 백그라운드 스레드로 동작.
-에뮬레이터: 더미값 반환. 실기기 연결 시 실측값 자동 전환.
+Thermal/performance telemetry collector — runs as a background thread.
+Emulator: returns dummy values. Switches to real measurements automatically when a physical device is connected.
 """
 import subprocess, threading, time, re
 from dataclasses import dataclass, field, asdict
@@ -9,11 +9,11 @@ from dataclasses import dataclass, field, asdict
 @dataclass
 class TelemetrySnapshot:
     timestamp:   float = 0.0
-    cpu_temp:    float = 0.0   # °C
-    gpu_temp:    float = 0.0   # °C (실기기만)
-    battery_temp:float = 0.0   # °C
+    cpu_temp:    float = 0.0   # degrees C
+    gpu_temp:    float = 0.0   # degrees C (physical device only)
+    battery_temp:float = 0.0   # degrees C
     cpu_freq_mhz:float = 0.0   # MHz
-    gpu_load_pct:float = 0.0   # % (실기기만)
+    gpu_load_pct:float = 0.0   # % (physical device only)
     is_dummy:    bool  = False
 
     def to_dict(self) -> dict:
@@ -31,7 +31,7 @@ class TelemetryCollector:
         self._running = False
         self._thread  = None
 
-    # ── 공개 API ──────────────────────────────────────────────
+    # ── Public API ────────────────────────────────────────────
 
     def start(self):
         self._running = True
@@ -49,7 +49,7 @@ class TelemetryCollector:
     def get_history(self) -> list[dict]:
         return [s.to_dict() for s in self._history]
 
-    # ── 내부 루프 ─────────────────────────────────────────────
+    # ── Internal Loop ─────────────────────────────────────────
 
     def _loop(self):
         while self._running:
@@ -69,12 +69,12 @@ class TelemetryCollector:
         except Exception:
             return ""
 
-    # ── 에뮬레이터 더미 ───────────────────────────────────────
+    # ── Emulator Dummy ────────────────────────────────────────
 
     def _collect_dummy(self) -> TelemetrySnapshot:
         import random, math
         t = time.time()
-        # 실제 같은 느낌의 노이즈 추가
+        # add noise to simulate realistic readings
         return TelemetrySnapshot(
             cpu_temp     = 35.0 + 5 * math.sin(t / 30) + random.uniform(-1, 1),
             gpu_temp     = 0.0,
@@ -84,28 +84,28 @@ class TelemetryCollector:
             is_dummy     = True,
         )
 
-    # ── 실기기 수집 ───────────────────────────────────────────
+    # ── Physical Device Collection ────────────────────────────
 
     def _collect_real(self) -> TelemetrySnapshot:
         snap = TelemetrySnapshot(is_dummy=False)
 
-        # CPU 온도 (thermal zone 중 cpu 관련 평균)
+        # CPU temperature (average across cpu-related thermal zones)
         snap.cpu_temp = self._read_cpu_temp()
 
-        # 배터리 온도
+        # battery temperature
         batt = self._shell("dumpsys battery | grep temperature")
         m = re.search(r"temperature:\s*(\d+)", batt)
         if m:
-            snap.battery_temp = int(m.group(1)) / 10.0  # 단위: 0.1°C
+            snap.battery_temp = int(m.group(1)) / 10.0  # unit: 0.1 degrees C
 
-        # CPU 주파수 (cpu0 기준)
+        # CPU frequency (based on cpu0)
         freq = self._shell(
             "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq"
         )
         if freq.isdigit():
             snap.cpu_freq_mhz = int(freq) / 1000.0
 
-        # GPU 부하 (Adreno, 삼성 기기)
+        # GPU load (Adreno, Samsung devices)
         gpu_busy = self._shell("cat /sys/class/kgsl/kgsl-3d0/gpubusy")
         if gpu_busy:
             parts = gpu_busy.split()
@@ -121,6 +121,6 @@ class TelemetryCollector:
             line = line.strip()
             if line.isdigit():
                 v = int(line)
-                # 단위가 millidegree인 경우 변환
+                # convert if unit is millidegrees
                 temps.append(v / 1000.0 if v > 1000 else float(v))
         return sum(temps) / len(temps) if temps else 0.0

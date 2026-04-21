@@ -1,6 +1,6 @@
 """
-서버 1회 세팅 스크립트.
-로컬 PC에서 실행 → paramiko로 서버에 접속 → 필요한 패키지/환경 자동 설치.
+One-time server setup script.
+Run from local PC -> connects to server via paramiko -> auto-installs required packages/environment.
 """
 import sys, io, time
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
@@ -31,45 +31,45 @@ def run(c, cmd, timeout=60, show=True):
     stdout = out.read().decode("utf-8", errors="ignore").strip()
     stderr = err.read().decode("utf-8", errors="ignore").strip()
     if show and stdout:
-        print(f"  → {stdout[:300]}")
+        print(f"  -> {stdout[:300]}")
     if stderr and "warning" not in stderr.lower():
         print(f"  [stderr] {stderr[:200]}")
     return stdout
 
 
 def step(msg):
-    print(f"\n{'─'*55}\n▶ {msg}\n{'─'*55}")
+    print(f"\n{'─'*55}\n> {msg}\n{'─'*55}")
 
 
 def setup_system(c):
-    step("1. 시스템 패키지 설치")
+    step("1. Install system packages")
     pkgs = (
         "xvfb tigervnc-standalone-server tigervnc-common "
         "adb python3-pip python3-venv "
         "openjdk-17-jdk-headless unzip wget curl libgl1"
     )
     run(c, f"sudo DEBIAN_FRONTEND=noninteractive apt-get install -y {pkgs}", timeout=180)
-    print("  ✓ 패키지 설치 완료")
+    print("  Package installation complete")
 
 
 def setup_vnc(c):
-    step("2. VNC 설정")
+    step("2. Configure VNC")
     run(c, "mkdir -p ~/.vnc")
-    # 비밀번호 설정 (non-interactive)
+    # Set password (non-interactive)
     run(c, f"printf '{VNC_PASSWORD}\\n{VNC_PASSWORD}\\nn\\n' | vncpasswd", timeout=10)
-    # xstartup 파일 생성
+    # Create xstartup file
     xstartup = "#!/bin/sh\\nexec openbox-session &"
     run(c, f"echo '{xstartup}' > ~/.vnc/xstartup && chmod +x ~/.vnc/xstartup", timeout=5)
-    # openbox 설치 (가벼운 WM)
+    # Install openbox (lightweight WM)
     run(c, "sudo apt-get install -y openbox", timeout=60)
-    print("  ✓ VNC 설정 완료")
+    print("  VNC configuration complete")
 
 
 def setup_android_sdk(c):
-    step("3. Android SDK 설치")
-    # 이미 설치됐으면 스킵
+    step("3. Install Android SDK")
+    # Skip if already installed
     if "cmdline-tools" in run(c, f"ls {REMOTE_SDK_DIR}/cmdline-tools 2>/dev/null || echo ''", show=False):
-        print("  ✓ 이미 설치되어 있음, 스킵")
+        print("  Already installed, skipping")
         return
 
     run(c, f"mkdir -p {REMOTE_SDK_DIR}/cmdline-tools")
@@ -80,7 +80,7 @@ def setup_android_sdk(c):
         f"mv /tmp/cmdtools_extracted/cmdline-tools/* {REMOTE_SDK_DIR}/cmdline-tools/latest/"
     ))
 
-    # 환경변수 설정
+    # Set environment variables
     env_lines = (
         f"export ANDROID_SDK_ROOT={REMOTE_SDK_DIR}\\n"
         f"export PATH=$PATH:{REMOTE_SDK_DIR}/cmdline-tools/latest/bin"
@@ -90,56 +90,56 @@ def setup_android_sdk(c):
     run(c, f"grep -q ANDROID_SDK_ROOT ~/.bashrc || printf '{env_lines}' >> ~/.bashrc")
 
     sdkmanager = f"{REMOTE_SDK_DIR}/cmdline-tools/latest/bin/sdkmanager"
-    # 라이선스 동의
+    # Accept licenses
     run(c, f"yes | ANDROID_SDK_ROOT={REMOTE_SDK_DIR} {sdkmanager} --licenses", timeout=30)
-    # 필요 패키지 설치
+    # Install required packages
     pkgs = f"'emulator' 'platform-tools' 'platforms;android-{ANDROID_API}' '{SYSTEM_IMAGE}'"
     run(c, f"ANDROID_SDK_ROOT={REMOTE_SDK_DIR} {sdkmanager} {pkgs}", timeout=300)
-    print("  ✓ Android SDK 설치 완료")
+    print("  Android SDK installation complete")
 
 
 def create_avd(c):
-    step("4. AVD(에뮬레이터) 생성")
+    step("4. Create AVD (emulator)")
     avdmanager = f"{REMOTE_SDK_DIR}/cmdline-tools/latest/bin/avdmanager"
     existing = run(c, f"ANDROID_SDK_ROOT={REMOTE_SDK_DIR} {avdmanager} list avd 2>/dev/null", show=False)
     if AVD_NAME in existing:
-        print(f"  ✓ AVD '{AVD_NAME}' 이미 존재, 스킵")
+        print(f"  AVD '{AVD_NAME}' already exists, skipping")
         return
 
     run(c, (
         f"echo 'no' | ANDROID_SDK_ROOT={REMOTE_SDK_DIR} {avdmanager} "
         f"create avd -n {AVD_NAME} -k '{SYSTEM_IMAGE}' --device '{AVD_DEVICE}' --force"
     ), timeout=60)
-    print(f"  ✓ AVD '{AVD_NAME}' 생성 완료")
+    print(f"  AVD '{AVD_NAME}' created successfully")
 
 
 def setup_python_env(c):
-    step("5. Python 가상환경 + 패키지 설치")
+    step("5. Python virtual environment + package installation")
     run(c, f"python3 -m venv {REMOTE_PROJECT_DIR}/.venv", timeout=30)
     pip = f"{REMOTE_PROJECT_DIR}/.venv/bin/pip"
     run(c, f"{pip} install --upgrade pip -q", timeout=60)
     run(c, (
         f"{pip} install opencv-python-headless numpy paramiko -q"
     ), timeout=120)
-    print("  ✓ Python 환경 준비 완료")
+    print("  Python environment ready")
 
 
 def create_start_script(c):
-    step("6. 시작 스크립트 생성")
+    step("6. Create startup scripts")
     run(c, f"mkdir -p {REMOTE_PROJECT_DIR}")
 
-    # Xvfb + VNC + 에뮬레이터를 한 번에 시작하는 스크립트
+    # Script to start Xvfb + VNC + emulator all at once
     script = (
         "#!/bin/bash\\n"
         "set -e\\n"
         "export ANDROID_SDK_ROOT=" + REMOTE_SDK_DIR + "\\n"
-        "# Xvfb 시작\\n"
+        "# Start Xvfb\\n"
         "Xvfb " + VNC_DISPLAY + " -screen 0 " + VNC_GEOMETRY + "x24 &\\n"
         "sleep 1\\n"
-        "# VNC 서버 시작\\n"
+        "# Start VNC server\\n"
         "vncserver " + VNC_DISPLAY + " -geometry " + VNC_GEOMETRY + " -depth 24 -localhost no\\n"
         "sleep 1\\n"
-        "# 에뮬레이터 시작 (백그라운드)\\n"
+        "# Start emulator (background)\\n"
         "DISPLAY=" + VNC_DISPLAY + " $ANDROID_SDK_ROOT/emulator/emulator "
         "-avd " + AVD_NAME + " -no-audio -gpu swiftshader_indirect "
         "-no-snapshot-save &\\n"
@@ -150,7 +150,7 @@ def create_start_script(c):
     start_path = f"{REMOTE_PROJECT_DIR}/start_env.sh"
     run(c, f"printf '{script}' > {start_path} && chmod +x {start_path}")
 
-    # 종료 스크립트
+    # Stop script
     stop_script = (
         "#!/bin/bash\\n"
         "adb emu kill 2>/dev/null || true\\n"
@@ -160,18 +160,18 @@ def create_start_script(c):
     )
     stop_path = f"{REMOTE_PROJECT_DIR}/stop_env.sh"
     run(c, f"printf '{stop_script}' > {stop_path} && chmod +x {stop_path}")
-    print(f"  ✓ {start_path}")
-    print(f"  ✓ {stop_path}")
+    print(f"  {start_path}")
+    print(f"  {stop_path}")
 
 
 def main():
     print("=" * 55)
-    print("  VLA Pipeline 서버 세팅")
+    print("  VLA Pipeline Server Setup")
     print(f"  {SERVER_HOST}:{SERVER_PORT}")
     print("=" * 55)
 
     c = connect()
-    print("  ✓ SSH 연결 성공")
+    print("  SSH connection successful")
 
     setup_system(c)
     setup_vnc(c)
@@ -183,15 +183,15 @@ def main():
     c.close()
 
     print("\n" + "=" * 55)
-    print("  ✓ 세팅 완료!")
+    print("  Setup complete!")
     print()
-    print("  다음 단계:")
-    print(f"  1. python deploy.py            ← 파이프라인 코드 업로드")
-    print(f"  2. SSH 접속 후 실행:")
+    print("  Next steps:")
+    print(f"  1. python deploy.py            <- upload pipeline code")
+    print(f"  2. Connect via SSH and run:")
     print(f"       cd {REMOTE_PROJECT_DIR}")
     print(f"       bash start_env.sh")
-    print(f"  3. RealVNC Viewer 접속: {SERVER_HOST}:5901")
-    print(f"     비밀번호: {VNC_PASSWORD}")
+    print(f"  3. Connect with RealVNC Viewer: {SERVER_HOST}:5901")
+    print(f"     Password: {VNC_PASSWORD}")
     print("=" * 55)
 
 

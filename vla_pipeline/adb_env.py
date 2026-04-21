@@ -1,6 +1,6 @@
 """
-ADB 인터페이스 — 화면 캡처 + 터치 주입.
-서버에서 직접 실행. adb가 PATH에 있어야 함.
+ADB interface — screen capture + touch injection.
+Run directly on the server. adb must be on PATH.
 """
 import subprocess, io, time, os, shutil
 import numpy as np
@@ -31,7 +31,7 @@ class ADBEnv:
         self._w, self._h = None, None
         self._base = [_ADB] + (["-s", device_serial] if device_serial else [])
 
-    # ── 내부 유틸 ─────────────────────────────────────────────
+    # ── Internal Utilities ────────────────────────────────────
 
     def _run(self, args: list, timeout=10) -> str:
         try:
@@ -57,7 +57,7 @@ class ADBEnv:
         except Exception:
             return b""
 
-    # ── 기기 관리 ─────────────────────────────────────────────
+    # ── Device Management ─────────────────────────────────────
 
     @staticmethod
     def list_devices() -> list[str]:
@@ -71,7 +71,7 @@ class ADBEnv:
     def wait_for_device(self, timeout=60):
         self._run(["wait-for-device"], timeout=timeout)
 
-    # ── 화면 정보 ─────────────────────────────────────────────
+    # ── Screen Info ───────────────────────────────────────────
 
     def get_screen_size(self) -> tuple[int, int]:
         if self._w:
@@ -82,7 +82,7 @@ class ADBEnv:
         self._w, self._h = map(int, size.split("x"))
         return self._w, self._h
 
-    # ── 화면 캡처 ─────────────────────────────────────────────
+    # ── Screen Capture ────────────────────────────────────────
 
     def capture_screen(self) -> np.ndarray:
         for attempt in range(3):
@@ -95,9 +95,9 @@ class ADBEnv:
             if frame is not None:
                 return frame  # BGR numpy array
             time.sleep(0.2)
-        raise RuntimeError("screencap 3회 실패 — ADB 연결 확인")
+        raise RuntimeError("screencap failed 3 times — check ADB connection")
 
-    # ── 터치 주입 ─────────────────────────────────────────────
+    # ── Touch Injection ───────────────────────────────────────
 
     def _to_px(self, x_norm: float, y_norm: float) -> tuple[int, int]:
         w, h = self.get_screen_size()
@@ -116,10 +116,10 @@ class ADBEnv:
                    str(x1), str(y1), str(x2), str(y2), str(duration_ms)])
 
     def long_press(self, x_norm: float, y_norm: float, duration_ms: int = 800):
-        # swipe 제자리 = long press
+        # swipe in place = long press
         self.swipe(x_norm, y_norm, x_norm, y_norm, duration_ms)
 
-    # ── 액션 디스패치 ─────────────────────────────────────────
+    # ── Action Dispatch ───────────────────────────────────────
 
     def execute(self, action: dict):
         t = action.get("type")
@@ -135,4 +135,4 @@ class ADBEnv:
         elif t == "noop":
             pass
         else:
-            raise ValueError(f"알 수 없는 액션 타입: {t}")
+            raise ValueError(f"Unknown action type: {t}")

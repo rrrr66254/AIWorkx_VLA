@@ -1,6 +1,6 @@
 """
-로컬 vla_pipeline/ 코드를 서버에 SFTP로 업로드.
-코드 수정할 때마다 실행.
+Upload local vla_pipeline/ code to server via SFTP.
+Run this every time code is modified.
 """
 import sys, io, os
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
@@ -30,17 +30,17 @@ def deploy():
     run(c, f"mkdir -p {REMOTE_PROJECT_DIR}")
 
     files = [f for f in os.listdir(LOCAL_DIR) if f.endswith(".py") or f.endswith(".txt")]
-    print(f"업로드 대상: {len(files)}개 파일")
+    print(f"Upload targets: {len(files)} files")
 
     for fname in files:
         local_path  = os.path.join(LOCAL_DIR, fname)
         remote_path = f"{REMOTE_PROJECT_DIR}/{fname}"
         sftp.put(local_path, remote_path)
-        print(f"  ✓ {fname}")
+        print(f"  {fname}")
 
     sftp.close()
     c.close()
-    print(f"\n✓ 배포 완료 → {REMOTE_PROJECT_DIR}")
+    print(f"\nDeploy complete -> {REMOTE_PROJECT_DIR}")
 
 
 if __name__ == "__main__":

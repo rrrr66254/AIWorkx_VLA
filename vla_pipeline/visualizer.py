@@ -1,21 +1,21 @@
 """
-터치 액션 오버레이 시각화.
-VNC로 볼 때 어느 위치를 탭/스와이프하는지 프레임 위에 표시.
+Touch action overlay visualization.
+Displays tap/swipe positions on the frame when viewing via VNC.
 """
 import cv2
 import numpy as np
 
-# 색상 (BGR)
-COLOR_TAP        = (0,   60, 255)   # 빨강
-COLOR_LONG_PRESS = (0,  165, 255)   # 주황
-COLOR_SWIPE      = (0,  200,  80)   # 초록
-COLOR_TEXT       = (255, 255, 255)  # 흰색
+# colors (BGR)
+COLOR_TAP        = (0,   60, 255)   # red
+COLOR_LONG_PRESS = (0,  165, 255)   # orange
+COLOR_SWIPE      = (0,  200,  80)   # green
+COLOR_TEXT       = (255, 255, 255)  # white
 
 
 def draw_action(frame: np.ndarray, action: dict) -> np.ndarray:
     """
-    action: ADBAction.to_dict() 결과
-    반환: 오버레이가 그려진 복사본 (원본 수정 안 함)
+    action: result of ADBAction.to_dict()
+    returns: copy with overlay drawn (original is not modified)
     """
     out = frame.copy()
     h, w = out.shape[:2]
@@ -36,7 +36,7 @@ def draw_action(frame: np.ndarray, action: dict) -> np.ndarray:
         x2 = int(action["x2"] * w);  y2 = int(action["y2"] * h)
         _draw_swipe(out, x1, y1, x2, y2, COLOR_SWIPE)
 
-    # 우상단에 액션 타입 텍스트
+    # action type text in upper-right corner
     label = t.upper() if t != "noop" else ""
     if label:
         cv2.putText(out, label, (w - 120, 30),
@@ -46,7 +46,7 @@ def draw_action(frame: np.ndarray, action: dict) -> np.ndarray:
 
 
 def draw_telemetry(frame: np.ndarray, telemetry: dict) -> np.ndarray:
-    """좌상단에 발열/성능 수치 오버레이."""
+    """Overlay thermal/performance readings in the upper-left corner."""
     out = frame.copy()
     lines = [
         f"CPU {telemetry.get('cpu_temp', 0):.1f}C",
@@ -62,7 +62,7 @@ def draw_telemetry(frame: np.ndarray, telemetry: dict) -> np.ndarray:
     return out
 
 
-# ── 내부 드로잉 헬퍼 ─────────────────────────────────────────
+# ── Internal Drawing Helpers ──────────────────────────────────
 
 def _draw_tap(img, px, py, color, label="", radius=36):
     cv2.circle(img, (px, py), radius, color, 4)

@@ -6,9 +6,9 @@ Actions: 0=NOOP, 1=LEFT, 2=RIGHT, 3=UP, 4=DOWN
 Reward : +0.1 per step survived, -1.0 on death
 Network: Double DQN  (QNet + TargetNet)
 
-사용:
+Usage:
   agent = DQNAgent()
-  agent.load("rl_checkpoint.pt")   # 이어서 학습할 때
+  agent.load("rl_checkpoint.pt")   # resume training
   state  = agent.extract_state(nitrogen_raw)
   action = agent.select_action(state)
   agent.store(s, a, r, s_next, done)
@@ -22,7 +22,7 @@ import torch.nn as nn
 from collections import deque
 
 
-# ── 액션 정의 ────────────────────────────────────────────────
+# ── Action Definitions ───────────────────────────────────────────
 ACTION_NAMES = ["NOOP", "LEFT", "RIGHT", "UP", "DOWN"]
 ACTION_DICTS = {
     0: {"type": "noop"},
@@ -36,7 +36,7 @@ STATE_DIM  = 23   # j_left(2) + buttons(21)
 ACTION_DIM = 5
 
 
-# ── Q-Network ────────────────────────────────────────────────
+# ── Q-Network ────────────────────────────────────────────────────
 class QNetwork(nn.Module):
     def __init__(self):
         super().__init__()
@@ -50,7 +50,7 @@ class QNetwork(nn.Module):
         return self.net(x)
 
 
-# ── Replay Buffer ─────────────────────────────────────────────
+# ── Replay Buffer ─────────────────────────────────────────────────
 class ReplayBuffer:
     def __init__(self, capacity: int = 20_000):
         self.buf = deque(maxlen=capacity)
@@ -73,7 +73,7 @@ class ReplayBuffer:
         return len(self.buf)
 
 
-# ── DQN Agent ─────────────────────────────────────────────────
+# ── DQN Agent ─────────────────────────────────────────────────────
 class DQNAgent:
     def __init__(
         self,
@@ -81,10 +81,10 @@ class DQNAgent:
         gamma: float        = 0.99,
         epsilon_start: float = 1.0,
         epsilon_end: float  = 0.05,
-        epsilon_decay: float = 0.997,   # ε 0.05 도달: ~1100 스텝
-        target_update: int  = 100,      # 타겟 네트워크 동기화 주기
+        epsilon_decay: float = 0.997,   # reach epsilon 0.05: ~1100 steps
+        target_update: int  = 100,      # target network sync interval
         batch_size: int     = 64,
-        train_every: int    = 4,        # 몇 스텝마다 학습
+        train_every: int    = 4,        # train every N steps
         device: str         = None,
     ):
         self.gamma         = gamma
@@ -104,26 +104,26 @@ class DQNAgent:
         self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=lr)
         self.buffer    = ReplayBuffer()
 
-        self.total_steps  = 0   # 환경 스텝 수
-        self.train_steps  = 0   # 학습 업데이트 수
+        self.total_steps  = 0   # environment step count
+        self.train_steps  = 0   # training update count
         self.episode_reward = 0.0
         self.episode_count  = 0
         self.best_episode_reward = -float("inf")
 
-    # ── State 추출 ────────────────────────────────────────────
+    # ── State Extraction ──────────────────────────────────────────
     def extract_state(self, nitrogen_raw) -> np.ndarray:
-        """NitroGen dict → 23차원 float32 state."""
+        """NitroGen dict -> 23-dim float32 state."""
         if isinstance(nitrogen_raw, dict):
             jl = np.array(nitrogen_raw.get("j_left",  [[0.0, 0.0]]), dtype=np.float32)
             bt = np.array(nitrogen_raw.get("buttons", [[0.0] * 21]), dtype=np.float32)
-            # 첫 번째 타임스텝 사용
+            # use first timestep
             if jl.ndim == 2: jl = jl[0]
             if bt.ndim == 2: bt = bt[0]
         else:
             jl = np.zeros(2,  dtype=np.float32)
             bt = np.zeros(21, dtype=np.float32)
 
-        # 길이 맞추기
+        # align lengths
         jl = np.resize(jl, 2)
         bt = np.resize(bt, 21)
         return np.concatenate([jl, bt])   # (23,)
@@ -132,7 +132,7 @@ class DQNAgent:
     def zero_state() -> np.ndarray:
         return np.zeros(STATE_DIM, dtype=np.float32)
 
-    # ── 액션 선택 (ε-greedy) ──────────────────────────────────
+    # ── Action Selection (epsilon-greedy) ─────────────────────────
     def select_action(self, state: np.ndarray) -> int:
         if random.random() < self.epsilon:
             return random.randrange(ACTION_DIM)
@@ -143,7 +143,7 @@ class DQNAgent:
     def get_action_dict(self, action_idx: int) -> dict:
         return ACTION_DICTS[action_idx]
 
-    # ── Transition 저장 ───────────────────────────────────────
+    # ── Store Transition ──────────────────────────────────────────
     def store(self, s, a, r, s2, done):
         self.buffer.push(s, a, r, s2, done)
         self.episode_reward += r
@@ -153,9 +153,9 @@ class DQNAgent:
                 self.best_episode_reward = self.episode_reward
             self.episode_reward = 0.0
 
-    # ── 학습 ─────────────────────────────────────────────────
+    # ── Training ──────────────────────────────────────────────────
     def train(self) -> float | None:
-        """배치 샘플링 → Double DQN loss → 업데이트. loss 반환."""
+        """Sample batch -> Double DQN loss -> update. Returns loss."""
         if len(self.buffer) < self.batch_size:
             return None
 
@@ -166,10 +166,10 @@ class DQNAgent:
         s2 = torch.FloatTensor(s2).to(self.device)
         d  = torch.FloatTensor(d).to(self.device)
 
-        # 현재 Q값
+        # current Q values
         q_vals = self.q_net(s).gather(1, a.unsqueeze(1)).squeeze(1)
 
-        # Double DQN 타겟: 온라인 네트워크로 액션 선택, 타겟 네트워크로 평가
+        # Double DQN target: select action with online network, evaluate with target network
         with torch.no_grad():
             best_a  = self.q_net(s2).argmax(dim=1, keepdim=True)
             next_q  = self.target_net(s2).gather(1, best_a).squeeze(1)
@@ -181,7 +181,7 @@ class DQNAgent:
         nn.utils.clip_grad_norm_(self.q_net.parameters(), 1.0)
         self.optimizer.step()
 
-        # ε 감소
+        # decay epsilon
         self.epsilon = max(self.epsilon_end, self.epsilon * self.epsilon_decay)
 
         self.train_steps += 1
@@ -190,7 +190,7 @@ class DQNAgent:
 
         return float(loss.item())
 
-    # ── 저장 / 로드 ───────────────────────────────────────────
+    # ── Save / Load ───────────────────────────────────────────────
     def save(self, path: str):
         torch.save({
             "q_net":        self.q_net.state_dict(),
@@ -212,7 +212,7 @@ class DQNAgent:
         self.train_steps         = ckpt.get("train_steps",   0)
         self.episode_count       = ckpt.get("episode_count", 0)
         self.best_episode_reward = ckpt.get("best_episode_reward", -float("inf"))
-        print(f"[RL] Loaded: ε={self.epsilon:.3f}  "
+        print(f"[RL] Loaded: epsilon={self.epsilon:.3f}  "
               f"env_steps={self.total_steps}  "
               f"train_steps={self.train_steps}  "
               f"episodes={self.episode_count}  "
