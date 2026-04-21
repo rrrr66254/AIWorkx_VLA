@@ -32,7 +32,7 @@ from rl_agent       import DQNAgent, ACTION_NAMES
 DETECT_PX_X,   DETECT_PX_Y   = 800, 2104
 PLAY_TAP_X,    PLAY_TAP_Y    = 810, 2220
 POPUP_CLOSE_X, POPUP_CLOSE_Y = 820, 175   # result screen small X button
-IAP_CLOSE_X,   IAP_CLOSE_Y   = 1040, 248  # IAP popup (Permanent score boost etc.) X button
+IAP_CLOSE_X,   IAP_CLOSE_Y   = 996, 487   # IAP popup (Permanent score boost etc.) X button
 CONTINUE_PX_X, CONTINUE_PX_Y = 540, 860
 
 GAME_PKG   = "com.kiloo.subwaysurf"
@@ -79,18 +79,27 @@ def ensure_game_foreground(env: ADBEnv) -> bool:
 
 
 def handle_game_over(env: ADBEnv):
-    """Game over screen -> close popups -> restart PLAY."""
+    """Game over screen -> close popups -> restart PLAY.
+
+    Subway Surfers often chains multiple IAP popups (Permanent score boost,
+    Daily reward, Mission board, etc.) so we tap the IAP close position
+    several times with short pauses to dismiss all of them.
+    """
     print("[NG-RL] Game over -> restart")
-    # 1) IAP popup X button (top-right red circle, if present)
-    env._run(["shell", "input", "tap", str(IAP_CLOSE_X), str(IAP_CLOSE_Y)])
-    time.sleep(0.3)
+    # 1) IAP popup X button — tap up to 4 times to chain-close popups
+    for _ in range(4):
+        env._run(["shell", "input", "tap", str(IAP_CLOSE_X), str(IAP_CLOSE_Y)])
+        time.sleep(0.4)
     # 2) Result screen X button (score summary screen)
     env._run(["shell", "input", "tap", str(POPUP_CLOSE_X), str(POPUP_CLOSE_Y)])
     time.sleep(0.5)
-    # 3) PLAY button (back on main menu now)
+    # 3) One more IAP close in case a new popup appeared after result screen
+    env._run(["shell", "input", "tap", str(IAP_CLOSE_X), str(IAP_CLOSE_Y)])
+    time.sleep(0.4)
+    # 4) PLAY button (back on main menu now)
     env._run(["shell", "input", "tap", str(PLAY_TAP_X), str(PLAY_TAP_Y)])
     time.sleep(0.8)
-    # 4) Game start confirmation tap (character selection / mission screen)
+    # 5) Game start confirmation tap (character selection / mission screen)
     env._run(["shell", "input", "tap", "540", "1200"])
     time.sleep(0.8)
 
