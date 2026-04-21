@@ -201,8 +201,10 @@ def main():
     prev_state      = None
     prev_action     = None
     rl_loss         = None
-    ng_count        = 0   # number of NitroGen action selections
-    rl_count        = 0   # number of RL action selections
+    ng_count        = 0   # cumulative NitroGen actions (for checkpoint log)
+    rl_count        = 0   # cumulative RL actions (for checkpoint log)
+    ep_ng           = 0   # per-episode NitroGen actions (resets each game over)
+    ep_rl           = 0   # per-episode RL actions (resets each game over)
 
     print("[NG-RL] Starting. Press Ctrl+C to stop.")
     print("-" * 60)
@@ -234,6 +236,8 @@ def main():
                     agent.store(prev_state, prev_action, -1.0, ns, True)
                     prev_state = prev_action = None
                 game_over_count += 1
+                ep_ng = 0   # reset per-episode counters
+                ep_rl = 0
                 handle_game_over(env)
                 step += 1
                 continue
@@ -253,13 +257,15 @@ def main():
                 ng_adb    = mapper.map(nitrogen_raw)
                 action_dict = ng_adb.to_dict()
                 action_idx  = action_dict_to_idx(action_dict)
-                ng_count   += 1
+                ng_count += 1
+                ep_ng    += 1
                 src = "NG"
             else:
                 # exploitation: RL learned action
                 action_idx  = agent.select_action(state)
                 action_dict = agent.get_action_dict(action_idx)
-                rl_count   += 1
+                rl_count += 1
+                ep_rl    += 1
                 src = "RL"
 
             prev_state  = state
@@ -297,8 +303,8 @@ def main():
                 fps      = 1.0 / max(elapsed, 1e-6)
                 aname    = ACTION_NAMES[prev_action] if prev_action is not None else "?"
                 loss_str = f"{rl_loss:.4f}" if rl_loss is not None else "  --  "
-                total_acts = ng_count + rl_count
-                ng_pct = 100 * ng_count / max(total_acts, 1)
+                ep_total = ep_ng + ep_rl
+                ng_pct   = 100 * ep_ng / max(ep_total, 1)   # per-episode ratio
                 scrcpy_fps = f"{capture.current_fps:.0f}" if capture else "ADB"
                 print(
                     f"  step={step:5d} | {src}:{aname:5s} | "
