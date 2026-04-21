@@ -26,7 +26,7 @@ Uses the NitroGen model as a teacher to train a Double DQN agent to play Subway 
 
 ```
 [Local PC (Windows)]
-  config.py           -- server connection info
+  config.py           -- your personal server connection info (not committed to git)
   server_setup.py     -- one-time server setup (SSH)
   deploy.py           -- code upload (SFTP)
   viewer.py           -- real-time monitoring GUI
@@ -37,7 +37,7 @@ Uses the NitroGen model as a teacher to train a Double DQN agent to play Subway 
   Xvfb :1             -- virtual display
   TigerVNC :1         -- VNC server (view screen from local)
   Android AVD         -- emulator (1080x2280)
-  /home/sltrain/vla_pipeline/
+  ~/vla_pipeline/
     pipeline_ng_rl.py -- main RL pipeline
     rl_agent.py       -- Double DQN agent
     fast_capture.py   -- scrcpy high-speed capture
@@ -54,11 +54,11 @@ Uses the NitroGen model as a teacher to train a Double DQN agent to play Subway 
 ### Local PC
 
 - Python 3.10 or higher
-- pip install paramiko opencv-python numpy
+- `pip install paramiko opencv-python numpy`
 
 ### Server (Linux)
 
-- GPU: RTX 4090 / RTX 5090 or better recommended (minimum 16GB VRAM)
+- GPU: RTX 4090 / RTX 5090 or better recommended (minimum 16 GB VRAM)
 - Ubuntu 20.04 / 22.04
 - CUDA 12.x
 - Python 3.10 or higher (Miniconda recommended)
@@ -71,27 +71,40 @@ Uses the NitroGen model as a teacher to train a Double DQN agent to play Subway 
 
 ## 3. Initial Server Setup
 
-### 3-1. Write config.py
+### 3-1. Create config.py
 
-Create `config.py` in the project root. (do not commit to git)
+Each team member creates their own `config.py` from the provided template.
+This file is listed in `.gitignore` and is never committed.
+
+```bash
+cp config.example.py config.py
+```
+
+Then open `config.py` and fill in your own values:
 
 ```python
-SERVER_HOST = "163.152.x.x"       # server IP
+SERVER_HOST = "YOUR_SERVER_IP"    # e.g. "192.168.1.100"
 SERVER_PORT = 22
-SERVER_USER = "sltrain"
-SERVER_PASS = "your_password"
+SERVER_USER = "YOUR_USERNAME"     # your Linux account on the server
+SERVER_PASS = "YOUR_PASSWORD"
 
-VNC_PORT     = 5901
-VNC_PASSWORD = "vncpass"
-VNC_GEOMETRY = "1920x1080"
-VNC_DISPLAY  = ":1"
+VNC_PASSWORD = "YOUR_VNC_PASSWORD"
 
-REMOTE_SDK_DIR     = "/home/sltrain/android-sdk"
-REMOTE_PROJECT_DIR = "/home/sltrain/vla_pipeline"
-AVD_NAME           = "subway_avd"
-AVD_DEVICE         = "pixel_6"
-ANDROID_API        = "34"
-SYSTEM_IMAGE       = "system-images;android-34;google_apis;x86_64"
+# All remote paths below are auto-derived from SERVER_USER.
+# No changes needed unless your home directory is non-standard.
+```
+
+All remote paths (`~/android-sdk`, `~/vla_pipeline`, `~/NitroGen`, etc.)
+are automatically derived from `SERVER_USER`, so you only need to set your
+credentials.
+
+Alternatively, use environment variables instead of editing the file:
+
+```bash
+export VLA_HOST=YOUR_SERVER_IP
+export VLA_USER=YOUR_USERNAME
+export VLA_PASS=YOUR_PASSWORD
+export VLA_VNC_PASS=YOUR_VNC_PASSWORD
 ```
 
 ### 3-2. Automated Server Setup
@@ -104,7 +117,7 @@ This script automatically:
 1. Installs required apt packages (Xvfb, TigerVNC, ADB, OpenJDK)
 2. Downloads Android SDK cmdline-tools
 3. Downloads API 34 x86_64 system image
-4. Creates AVD (subway_avd)
+4. Creates AVD (GameTest)
 5. Sets VNC password
 6. Creates auto-start script for Xvfb + VNC + emulator
 7. Installs pip packages
@@ -116,7 +129,7 @@ Estimated time: approximately 10-20 minutes (depending on internet speed)
 After server setup is complete, connect using RealVNC Viewer or TigerVNC Viewer.
 
 ```
-Address: serverIP:5901
+Address: YOUR_SERVER_IP:5901
 Password: VNC_PASSWORD from config.py
 ```
 
@@ -132,10 +145,10 @@ If the emulator screen is visible, setup is successful.
 
 ```bash
 export DISPLAY=:1
-export ANDROID_SDK_ROOT=/home/sltrain/android-sdk
+export ANDROID_SDK_ROOT=~/android-sdk
 
-/home/sltrain/android-sdk/emulator/emulator \
-  -avd subway_avd \
+~/android-sdk/emulator/emulator \
+  -avd GameTest \
   -no-window \
   -gpu swiftshader_indirect \
   -no-boot-anim \
@@ -185,7 +198,7 @@ NitroGen is a VLA model that watches the game screen and predicts gamepad signal
 ### 5-1. Install on Server
 
 ```bash
-cd /home/sltrain
+cd ~
 git clone https://github.com/MineDojo/NitroGen
 cd NitroGen
 pip install -e ".[serve]"
@@ -193,19 +206,19 @@ pip install -e ".[serve]"
 
 ### 5-2. Model Weights
 
-Place the NitroGen model file (`ng.pt`) at `/home/sltrain/NitroGen/`.
+Place the NitroGen model file (`ng.pt`) at `~/NitroGen/ng.pt`.
 
 ### 5-3. Start the Server
 
 ```bash
-cd /home/sltrain/NitroGen
+cd ~/NitroGen
 python scripts/serve.py ng.pt --port 5556
 ```
 
 Default port is 5556. Run in background:
 
 ```bash
-nohup python scripts/serve.py ng.pt --port 5556 > nitrogen.log 2>&1 &
+nohup python scripts/serve.py ng.pt --port 5556 > ~/vla_pipeline/nitrogen.log 2>&1 &
 ```
 
 ### 5-4. Dummy Mode (testing without NitroGen)
@@ -227,10 +240,10 @@ Apply local code changes to the server.
 ```bash
 # Upload all .py files inside vla_pipeline/
 python deploy.py
-
-# Upload individual files (directly to server directory)
-python final_setup.py
 ```
+
+`deploy.py` reads `SERVER_HOST`, `SERVER_USER`, `SERVER_PASS`, and `REMOTE_PROJECT_DIR`
+from your `config.py` and uploads via SFTP — no hardcoded paths.
 
 ---
 
@@ -241,7 +254,7 @@ python final_setup.py
 Run directly from server SSH:
 
 ```bash
-cd /home/sltrain/vla_pipeline
+cd ~/vla_pipeline
 CUDA_VISIBLE_DEVICES=0 PYTHONUNBUFFERED=1 DISPLAY=:1 \
   python pipeline_ng_rl.py \
   --device emulator-5554 \
@@ -266,17 +279,16 @@ CUDA_VISIBLE_DEVICES=0 PYTHONUNBUFFERED=1 DISPLAY=:1 \
 Running watchdog on the server automatically restarts the pipeline if it crashes:
 
 ```bash
-# Run watchdog_ng_rl.sh in the background
-nohup bash /home/sltrain/vla_pipeline/watchdog_ng_rl.sh &
+nohup bash ~/vla_pipeline/watchdog_ng_rl.sh &
 ```
 
-watchdog_ng_rl.sh contents:
+watchdog_ng_rl.sh contents (generated by `server_setup.py`, uses `$HOME` automatically):
 
 ```bash
 #!/bin/bash
-PYTHON="/home/sltrain/miniconda3/bin/python3"
-PIPELINE="/home/sltrain/vla_pipeline/pipeline_ng_rl.py"
-LOG="/home/sltrain/vla_pipeline/pipeline_ng_rl.log"
+PYTHON="$HOME/miniconda3/bin/python3"
+PIPELINE="$HOME/vla_pipeline/pipeline_ng_rl.py"
+LOG="$HOME/vla_pipeline/pipeline_ng_rl.log"
 DEVICE="emulator-5554"
 
 while true; do
@@ -293,7 +305,8 @@ done
 
 ### 7-3. Remote Execution from Local (via viewer.py)
 
-Click the "Start Pipeline" button in `viewer.py` to run the pipeline via SSH from local.
+Click the "Start NitroGen" button in `viewer.py` to start the pipeline via SSH from local.
+All paths used by viewer.py are read from your `config.py`.
 
 ### 7-4. Sample Console Output
 
@@ -321,7 +334,7 @@ step=  345 | RL:RIGHT | e=0.268 | loss=0.0353 | buf=  316 | NG:34%|RL:66% | cap=
 | ~1 hour | 0.5 | NitroGen 50%, RL 50% |
 | ~3-4 hours | 0.1 | RL plays 90%+ (expected to surpass NitroGen) |
 
-Checkpoint: `/home/sltrain/vla_pipeline/rl_ng_checkpoint.pt` (auto-saved every 200 steps)
+Checkpoint: `~/vla_pipeline/rl_ng_checkpoint.pt` (auto-saved every 200 steps)
 
 ---
 
@@ -333,14 +346,19 @@ A real-time monitoring GUI that runs on the local PC.
 python viewer.py
 ```
 
-Displays:
-- Server SSH connection status
-- NitroGen server status
-- Pipeline execution status (epsilon, steps, dies, fps)
-- Live log streaming
-- Start / Stop buttons
+Open `http://localhost:8080` in your browser.
 
-Watching the emulator screen via VNC alongside viewer.py lets you visually track training progress.
+Displays:
+- Emulator screen (live, refreshed every 200 ms)
+- Pipeline log (live)
+- Start / Stop NitroGen pipeline button
+
+Controls in the browser:
+- Click = tap on emulator
+- Drag = swipe
+- Right-click = long press
+
+All SSH connection details and remote paths are read from `config.py`.
 
 ---
 
@@ -348,15 +366,16 @@ Watching the emulator screen via VNC alongside viewer.py lets you visually track
 
 ```
 AIWorkx_VLA/
-  config.py               local server connection info (excluded from git)
+  config.py               your personal server connection info (excluded from git)
+  config.example.py       template -- copy to config.py and fill in your values
   server_setup.py         one-time server environment setup (SSH)
-  deploy.py               uploads vla_pipeline/ code to server
-  viewer.py               local monitoring GUI (tkinter)
+  deploy.py               uploads vla_pipeline/ code to server (reads from config.py)
+  viewer.py               local monitoring web GUI (http://localhost:8080)
   grab_screen.py          capture current emulator screen (debug)
   status_check.py         quick pipeline status check (debug)
   game_setup.py           relaunch game + enter PLAY (emergency recovery)
 
-  [pipeline files executed on server]
+  [pipeline files executed on server -- deployed via deploy.py]
   pipeline_ng_rl.py       NitroGen-guided RL main pipeline
   rl_agent.py             Double DQN agent (23-dim state)
   fast_capture.py         scrcpy high-speed frame capture (~20fps)
@@ -430,6 +449,7 @@ else:
 ```
 
 Every 30 steps, automatically checks if the game is in the foreground and relaunches if not.
+Checkpoint is saved to `~/vla_pipeline/rl_ng_checkpoint.pt` (resolved at runtime via `os.path.expanduser`).
 
 ---
 
@@ -505,7 +525,7 @@ If scrcpy fails, the pipeline automatically falls back to ADB screencap (~1fps).
 Symptom: `dies=0` stays constant, screen moves to Google or Chrome
 
 ```bash
-# Run game_setup.py on the server
+# Run game_setup.py from local (connects via SSH)
 python game_setup.py
 ```
 
@@ -532,7 +552,7 @@ Symptom: duplicate logs, ADB command conflicts
 pkill -9 -f pipeline_ng_rl.py
 pkill -f watchdog_ng_rl.sh
 # Restart single instance
-bash watchdog_ng_rl.sh &
+bash ~/vla_pipeline/watchdog_ng_rl.sh &
 ```
 
 ### ADB Swipe Timeout
@@ -540,7 +560,7 @@ bash watchdog_ng_rl.sh &
 Symptom: `subprocess.TimeoutExpired: Command timed out after 10 seconds`
 
 `_run()` in `adb_env.py` catches and handles TimeoutExpired.
-In the updated version, a timeout returns an empty string and the pipeline continues running.
+On timeout it returns an empty string and the pipeline continues running.
 
 ### NitroGen Server Connection Failure
 
@@ -551,8 +571,8 @@ Symptom: `Connection refused` or `retrying connection`
 ps aux | grep serve.py
 
 # Restart
-cd /home/sltrain/NitroGen
-nohup python scripts/serve.py ng.pt --port 5556 > nitrogen.log 2>&1 &
+cd ~/NitroGen
+nohup python scripts/serve.py ng.pt --port 5556 > ~/vla_pipeline/nitrogen.log 2>&1 &
 
 # Check port
 ss -tlnp | grep 5556
@@ -584,7 +604,7 @@ An alternative that learns directly from game screen pixels without NitroGen.
 python pipeline_cnn.py --device emulator-5554 --step-interval 0.3
 ```
 
-Checkpoint: `rl_cnn_checkpoint.pt`
+Checkpoint: `~/vla_pipeline/rl_cnn_checkpoint.pt`
 
 ---
 
@@ -593,14 +613,15 @@ Checkpoint: `rl_cnn_checkpoint.pt`
 Steps for a team member to follow from scratch:
 
 ```
-1. Write config.py (enter server IP/account info)
-2. python server_setup.py        -- automated server environment setup (~10 min)
-3. Verify server connection via VNC
-4. Install APK on emulator and launch game for the first time (manual)
-5. Start NitroGen server (from server SSH)
-6. python deploy.py              -- upload latest code to server
-7. python viewer.py              -- launch local monitoring GUI
-8. Click "Start Pipeline" in viewer.py
-   or directly on server: bash watchdog_ng_rl.sh &
+1. cp config.example.py config.py   -- fill in your server IP, username, password
+2. python server_setup.py           -- automated server environment setup (~10 min)
+3. Verify server connection via VNC (YOUR_SERVER_IP:5901)
+4. Install APK on emulator and launch game for the first time (manual, via VNC)
+5. Start NitroGen server on the server:
+     cd ~/NitroGen && nohup python scripts/serve.py ng.pt --port 5556 &
+6. python deploy.py                 -- upload latest code to server
+7. python viewer.py                 -- launch local monitoring (http://localhost:8080)
+8. Click "Start NitroGen" in the browser
+   or directly on server: bash ~/vla_pipeline/watchdog_ng_rl.sh &
 9. Monitor training progress via VNC + viewer.py
 ```

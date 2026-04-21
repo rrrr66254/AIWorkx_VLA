@@ -21,7 +21,7 @@ PLAY_TAP_X,    PLAY_TAP_Y    = 800, 2200
 POPUP_CLOSE_X, POPUP_CLOSE_Y = 820, 175
 CONTINUE_PX_X, CONTINUE_PX_Y = 540, 860    # Continue? (blue)
 
-RL_CKPT    = "/home/sltrain/vla_pipeline/rl_cnn_checkpoint.pt"
+RL_CKPT    = os.path.join(os.path.expanduser("~"), "vla_pipeline", "rl_cnn_checkpoint.pt")
 SAVE_EVERY = 200   # save checkpoint every N steps
 
 

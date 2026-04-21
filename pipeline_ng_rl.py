@@ -36,7 +36,7 @@ IAP_CLOSE_X,   IAP_CLOSE_Y   = 1040, 248  # IAP popup (Permanent score boost etc
 CONTINUE_PX_X, CONTINUE_PX_Y = 540, 860
 
 GAME_PKG   = "com.kiloo.subwaysurf"
-RL_CKPT    = "/home/sltrain/vla_pipeline/rl_ng_checkpoint.pt"
+RL_CKPT    = os.path.join(os.path.expanduser("~"), "vla_pipeline", "rl_ng_checkpoint.pt")
 SAVE_EVERY = 200
 
 

@@ -15,15 +15,17 @@ from socketserver import ThreadingMixIn
 from urllib.parse import urlparse, parse_qs
 
 import paramiko
-from config import SERVER_HOST, SERVER_PORT, SERVER_USER, SERVER_PASS
+from config import (
+    SERVER_HOST, SERVER_PORT, SERVER_USER, SERVER_PASS,
+    REMOTE_SDK_DIR, REMOTE_PROJECT_DIR,
+    NITROGEN_DIR, NITROGEN_CKPT, PYTHON_PATH,
+)
 
-ADB          = "/home/sltrain/android-sdk/platform-tools/adb"
-PYTHON       = "/home/sltrain/miniconda3/bin/python3"
-PIPELINE     = "/home/sltrain/vla_pipeline/pipeline_ng_rl.py"
-PIPELINE_LOG = "/home/sltrain/vla_pipeline/pipeline_ng_rl.log"
-NITROGEN_DIR = "/home/sltrain/NitroGen"
-NITROGEN_CKPT= "/home/sltrain/NitroGen/ng.pt"
-NITROGEN_LOG = "/home/sltrain/vla_pipeline/nitrogen_serve.log"
+ADB          = f"{REMOTE_SDK_DIR}/platform-tools/adb"
+PYTHON       = PYTHON_PATH
+PIPELINE     = f"{REMOTE_PROJECT_DIR}/pipeline_ng_rl.py"
+PIPELINE_LOG = f"{REMOTE_PROJECT_DIR}/pipeline_ng_rl.log"
+NITROGEN_LOG = f"{REMOTE_PROJECT_DIR}/nitrogen_serve.log"
 NITROGEN_PORT= 5556
 DEVICE       = "emulator-5554"
 REFRESH_MS   = 200
@@ -141,7 +143,7 @@ def nitrogen_start() -> str:
         return "NitroGen server failed to start (timeout)"
     # 3. start NG-RL pipeline
     cmd = (
-        f"cd /home/sltrain/vla_pipeline && "
+        f"cd {REMOTE_PROJECT_DIR} && "
         f"CUDA_VISIBLE_DEVICES=0 PYTHONUNBUFFERED=1 "
         f"nohup {PYTHON} -u {PIPELINE} --device {DEVICE} "
         f"--nitrogen-port {NITROGEN_PORT} --no-record "
