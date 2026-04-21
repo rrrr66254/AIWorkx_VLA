@@ -81,19 +81,16 @@ def ensure_game_foreground(env: ADBEnv) -> bool:
 def handle_game_over(env: ADBEnv):
     """Game over screen -> close popups -> restart PLAY."""
     print("[NG-RL] Game over -> restart")
-    # 1) IAP popup X button (red circle top-right)
+    # 1) IAP popup X button (top-right red circle, if present)
     env._run(["shell", "input", "tap", str(IAP_CLOSE_X), str(IAP_CLOSE_Y)])
-    time.sleep(0.25)
-    # 2) Result screen X button
-    env._run(["shell", "input", "tap", str(POPUP_CLOSE_X), str(POPUP_CLOSE_Y)])
-    time.sleep(0.25)
-    # 3) Close remaining popups with BACK key
-    env._run(["shell", "input", "keyevent", "KEYCODE_BACK"])
     time.sleep(0.3)
-    # 4) PLAY button
+    # 2) Result screen X button (score summary screen)
+    env._run(["shell", "input", "tap", str(POPUP_CLOSE_X), str(POPUP_CLOSE_Y)])
+    time.sleep(0.5)
+    # 3) PLAY button (back on main menu now)
     env._run(["shell", "input", "tap", str(PLAY_TAP_X), str(PLAY_TAP_Y)])
     time.sleep(0.8)
-    # 5) Character selection / game start confirmation tap
+    # 4) Game start confirmation tap (character selection / mission screen)
     env._run(["shell", "input", "tap", "540", "1200"])
     time.sleep(0.8)
 
@@ -105,6 +102,8 @@ def action_dict_to_idx(d: dict) -> int:
     if d.get("type") == "swipe":
         dx = d["x2"] - d["x1"]
         dy = d["y2"] - d["y1"]
+        if abs(dx) < 1e-6 and abs(dy) < 1e-6:
+            return 0   # zero-length swipe (cursor clamped at edge) -> noop
         if abs(dx) >= abs(dy):
             return 1 if dx < 0 else 2   # LEFT / RIGHT
         else:
@@ -201,10 +200,9 @@ def main():
     prev_state      = None
     prev_action     = None
     rl_loss         = None
-    ng_count        = 0   # cumulative NitroGen actions (for checkpoint log)
-    rl_count        = 0   # cumulative RL actions (for checkpoint log)
-    ep_ng           = 0   # per-episode NitroGen actions (resets each game over)
-    ep_rl           = 0   # per-episode RL actions (resets each game over)
+    ng_count        = 0   # cumulative NitroGen actions since pipeline start
+    rl_count        = 0   # cumulative RL actions since pipeline start
+    detect_frame    = None   # dedicated ADB frame for game-state detection
 
     print("[NG-RL] Starting. Press Ctrl+C to stop.")
     print("-" * 60)
@@ -213,33 +211,43 @@ def main():
         while running:
             t0 = time.time()
 
-            # 1. Capture screen (scrcpy or ADB)
+            # 1. Capture action frame (scrcpy or ADB)
             frame = get_frame()
 
-            # 2. Detect game state (every step — pixel read is O(1), no overhead)
+            # 2. Detection frame: dedicated ADB screencap every 5 steps for
+            #    guaranteed freshness. scrcpy can lag behind the real screen state
+            #    (e.g. game-over pixel missed because scrcpy shows cached frame).
+            if step % 5 == 0 or detect_frame is None:
+                detect_frame = env.capture_screen()
+
             # ensure_game_foreground is an ADB call, keep throttled to every 30 steps
             if step % 30 == 0:
                 ensure_game_foreground(env)
 
-            if detect_continue_dialog(frame):
-                if prev_state is not None:
-                    ns = DQNAgent.zero_state()
-                    agent.store(prev_state, prev_action, -1.0, ns, True)
-                    prev_state = prev_action = None
-                step += 1
-                time.sleep(0.5)
-                continue
-
-            if detect_game_over(frame):
+            # Check game_over FIRST: the result screen can trigger both game_over
+            # and continue_dialog pixels simultaneously (blue revive button at 540,860).
+            # Handling game_over takes priority.
+            if detect_game_over(detect_frame):
                 if prev_state is not None:
                     ns = DQNAgent.zero_state()
                     agent.store(prev_state, prev_action, -1.0, ns, True)
                     prev_state = prev_action = None
                 game_over_count += 1
-                ep_ng = 0   # reset per-episode counters
-                ep_rl = 0
                 handle_game_over(env)
+                detect_frame = None   # force ADB refresh after restart
                 step += 1
+                continue
+
+            # Continue dialog ("Continue for coins?") — only reached when NOT game over
+            if detect_continue_dialog(detect_frame):
+                if prev_state is not None:
+                    ns = DQNAgent.zero_state()
+                    agent.store(prev_state, prev_action, -1.0, ns, True)
+                    prev_state = prev_action = None
+                # tap "No" side or wait for auto-dismiss
+                env._run(["shell", "input", "tap", "820", "1700"])  # right side = No/close
+                step += 1
+                time.sleep(0.5)
                 continue
 
             # 3. NitroGen inference (always runs - state extraction + exploration policy)
@@ -258,14 +266,12 @@ def main():
                 action_dict = ng_adb.to_dict()
                 action_idx  = action_dict_to_idx(action_dict)
                 ng_count += 1
-                ep_ng    += 1
                 src = "NG"
             else:
                 # exploitation: RL learned action
                 action_idx  = agent.select_action(state)
                 action_dict = agent.get_action_dict(action_idx)
                 rl_count += 1
-                ep_rl    += 1
                 src = "RL"
 
             prev_state  = state
@@ -299,12 +305,11 @@ def main():
             # 10. Console output (every 5 steps)
             step += 1
             if step % 5 == 0:
-                elapsed  = time.time() - t0
-                fps      = 1.0 / max(elapsed, 1e-6)
-                aname    = ACTION_NAMES[prev_action] if prev_action is not None else "?"
-                loss_str = f"{rl_loss:.4f}" if rl_loss is not None else "  --  "
-                ep_total = ep_ng + ep_rl
-                ng_pct   = 100 * ep_ng / max(ep_total, 1)   # per-episode ratio
+                elapsed    = time.time() - t0
+                aname      = ACTION_NAMES[prev_action] if prev_action is not None else "?"
+                loss_str   = f"{rl_loss:.4f}" if rl_loss is not None else "  --  "
+                total_acts = ng_count + rl_count
+                ng_pct     = 100 * ng_count / max(total_acts, 1)   # cumulative since start
                 scrcpy_fps = f"{capture.current_fps:.0f}" if capture else "ADB"
                 print(
                     f"  step={step:5d} | {src}:{aname:5s} | "
