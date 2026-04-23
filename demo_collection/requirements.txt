@@ -1,0 +1,4 @@
+opencv-python>=4.8
+numpy>=1.24
+# Only needed for the optional demo_upload.py remote workflow:
+paramiko>=3.0
